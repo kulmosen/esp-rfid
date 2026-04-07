@@ -19,3 +19,18 @@ To run the builder script with npm do as follows:
 ## webfilesbuilder
 
 The `webfilesbuilder` executable that you can get from the releases should be copied in the `tools/webfilesbuilder/` folder and run from there as it looks for files in specific folders relative to that location.
+
+## simulator
+
+There is now also a local simulator in `tools/simulator/`.
+
+It serves the web UI, emulates `/login`, `/update` and `/ws`, and keeps an in-memory device state so we can test the browser app without flashing an ESP8266 every time.
+
+To use it:
+
+1. change directory into `tools/simulator`
+2. execute `npm install`
+3. execute `npm start`
+4. open `http://127.0.0.1:8080`
+
+The simulator is intentionally a behavior-level test tool, not a full ESP8266 CPU emulator.

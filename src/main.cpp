@@ -32,6 +32,7 @@ SOFTWARE.
 #include <FS.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include <memory>
 #include <TimeLib.h>
 #include <Ticker.h>
 #include <time.h>
@@ -39,6 +40,9 @@ SOFTWARE.
 #include <Bounce2.h>
 #include "magicnumbers.h"
 #include "config.h"
+#include "core/AccessLogic.h"
+#include "core/ConfigModel.h"
+#include "core/RuntimeGuards.h"
 
 Config config;
 
@@ -96,6 +100,7 @@ uint8_t lastDoorbellState = 0;
 uint8_t lastDoorState = 0;
 uint8_t lastTamperState = 0;
 unsigned long nextbeat = 0;
+bool shouldReconnectWifi = false;
 time_t epoch;
 time_t lastNTPepoch;
 unsigned long lastNTPSync = 0;
@@ -105,6 +110,7 @@ unsigned long previousMillis = 0;
 bool shouldReboot = false;
 tm timeinfo;
 unsigned long uptimeSeconds = 0;
+bool wifiDisabledByPolicy = false;
 unsigned long wifiPinBlink = millis();
 unsigned long wiFiUptimeMillis = 0;
 
@@ -302,14 +308,17 @@ void ICACHE_RAM_ATTR loop()
 	}
 
 	// don't try connecting to WiFi when waiting for pincode
-	if (doEnableWifi == true && keyTimer == 0 && activateRelay[0] == true)
+	if (esprfid::shouldEnableWifiOnAdminRequest(doEnableWifi, keyTimer != 0, activateRelay[0], WiFi.isConnected()))
 	{
-		if (!WiFi.isConnected())
-		{
-			enableWifi();
-			writeEvent("INFO", "wifi", "Enabling WiFi", "");
-			doEnableWifi = false;
-		}
+		enableWifi();
+		writeEvent("INFO", "wifi", "Enabling WiFi", "");
+		doEnableWifi = false;
+	}
+
+	if (esprfid::shouldProcessWifiReconnect(shouldReconnectWifi, WiFi.isConnected()))
+	{
+		enableWifi();
+		writeEvent("INFO", "wifi", "Reconnecting WiFi", "");
 	}
 
 	if (config.mqttEnabled && mqttClient.connected())

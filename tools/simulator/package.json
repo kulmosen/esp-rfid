@@ -1,0 +1,15 @@
+{
+  "name": "esp-rfid-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local ESP-RFID simulator for web UI and websocket testing",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "smoke": "node smoke-test.js"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "ws": "^8.18.1"
+  }
+}

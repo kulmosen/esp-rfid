@@ -1,23 +1,33 @@
 #define MAX_WS_BUFFER 2048
 
-char wsBuffer[MAX_WS_BUFFER];
-
 struct WsMessage
 {
-	char *serializedMessage;
-	AsyncWebSocketClient *client;
+	char *serializedMessage = NULL;
+	size_t serializedLength = 0;
+	AsyncWebSocketClient *client = NULL;
 	WsMessage *nextMessage = NULL;
+
+	~WsMessage()
+	{
+		if (serializedMessage != NULL)
+		{
+			free(serializedMessage);
+		}
+	}
 };
 
 WsMessage *wsMessageQueue = NULL;
 
-// messageSize needs to be one char bigger than the string to contain the string terminator
-void addWsMessageToQueue(AsyncWebSocketClient *client, int messageSize)
+void addWsMessageToQueue(AsyncWebSocketClient *client, size_t messageSize)
 {
-	WsMessage *incomingMessage = new WsMessage;
-	incomingMessage->serializedMessage = (char *)malloc(messageSize);
-	strlcpy(incomingMessage->serializedMessage, (const char *)client->_tempObject, messageSize);
-	free(client->_tempObject);
+	if (client == NULL || client->_tempObject == NULL)
+	{
+		return;
+	}
+
+	WsMessage *incomingMessage = new WsMessage();
+	incomingMessage->serializedMessage = (char *)client->_tempObject;
+	incomingMessage->serializedLength = messageSize;
 	client->_tempObject = NULL;
 
 	incomingMessage->client = client;
@@ -40,6 +50,7 @@ void addWsMessageToQueue(AsyncWebSocketClient *client, int messageSize)
 
 void ICACHE_FLASH_ATTR processWsMessage(WsMessage *incomingMessage)
 {
+	std::unique_ptr<WsMessage> messageGuard(incomingMessage);
 	// We should always get a JSON object (stringfied) from browser, so parse it
 	DynamicJsonDocument root(2448);
 	AsyncWebSocketClient *client = incomingMessage->client;
@@ -51,12 +62,17 @@ void ICACHE_FLASH_ATTR processWsMessage(WsMessage *incomingMessage)
 #ifdef DEBUG
 		Serial.println(F("[ WARN ] Couldn't parse WebSocket message"));
 #endif
-		free(incomingMessage->serializedMessage);
-		free(incomingMessage);
 		return;
 	}
 	// Web Browser sends some commands, check which command is given
 	const char *command = root["command"];
+	if (command == NULL)
+	{
+#ifdef DEBUG
+		Serial.println(F("[ WARN ] WebSocket message missing command"));
+#endif
+		return;
+	}
 	// Check whatever the command is and act accordingly
 	if (strcmp(command, "remove") == 0)
 	{
@@ -71,15 +87,10 @@ void ICACHE_FLASH_ATTR processWsMessage(WsMessage *incomingMessage)
 		File f = SPIFFS.open("/config.json", "w");
 		if (f)
 		{
-			size_t len = 0;
-			while (incomingMessage->serializedMessage[len] != '\0' && len < MAX_WS_BUFFER)
-			{
-				len++;
-			}
-			f.write(incomingMessage->serializedMessage, len);
+			f.write((const uint8_t *)incomingMessage->serializedMessage, incomingMessage->serializedLength);
 			f.close();
 			shouldReboot = true;
-			writeEvent("INFO", "sys", "Config stored in the SPIFFS", String(len) + " bytes");
+			writeEvent("INFO", "sys", "Config stored in the SPIFFS", String(incomingMessage->serializedLength) + " bytes");
 		}
 	}
 	else if (strcmp(command, "userlist") == 0)
@@ -205,8 +216,6 @@ void ICACHE_FLASH_ATTR processWsMessage(WsMessage *incomingMessage)
 			configFile.close();
 		}
 	}
-	free(incomingMessage->serializedMessage);
-	free(incomingMessage);
 	yield();
 }
 
@@ -222,12 +231,30 @@ void ICACHE_FLASH_ATTR onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *c
 	else if (type == WS_EVT_DATA)
 	{
 		AwsFrameInfo *info = (AwsFrameInfo *)arg;
+		if (info->len >= MAX_WS_BUFFER)
+		{
+#ifdef DEBUG
+			Serial.println(F("[ WARN ] Dropping WebSocket message, payload too large"));
+#endif
+			if (client->_tempObject != NULL)
+			{
+				free(client->_tempObject);
+				client->_tempObject = NULL;
+			}
+			return;
+		}
+
 		if (info->final && info->index == 0 && info->len == len)
 		{
 			//the whole message is in a single frame and we got all of it's data
-			client->_tempObject = malloc(info->len);
+			client->_tempObject = malloc(info->len + 1);
+			if (client->_tempObject == NULL)
+			{
+				return;
+			}
 			memcpy((uint8_t *)(client->_tempObject), data, len);
-			addWsMessageToQueue(client, info->len + 1);
+			((char *)client->_tempObject)[info->len] = '\0';
+			addWsMessageToQueue(client, info->len);
 		}
 		else
 		{
@@ -236,7 +263,12 @@ void ICACHE_FLASH_ATTR onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *c
 			{
 				if (info->num == 0 && client->_tempObject == NULL)
 				{
-					client->_tempObject = malloc(info->len);
+					client->_tempObject = malloc(info->len + 1);
+					if (client->_tempObject == NULL)
+					{
+						return;
+					}
+					((char *)client->_tempObject)[info->len] = '\0';
 				}
 			}
 			if (client->_tempObject != NULL)
@@ -247,7 +279,8 @@ void ICACHE_FLASH_ATTR onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *c
 			{
 				if (info->final)
 				{
-					addWsMessageToQueue(client, info->len + 1);
+					((char *)client->_tempObject)[info->len] = '\0';
+					addWsMessageToQueue(client, info->len);
 				}
 			}
 		}

@@ -137,6 +137,17 @@ For Wiegand based readers, you can configure D0 and D1 pins via settings page. B
 ### MQTT
 You can integrate ESP-RFID with other systems using MQTT. Read the [additional documentation](./README-MQTT.md) for all the details.
 
+### Local simulator
+If you want to test the web UI and WebSocket flows without flashing hardware, there is now a local simulator in [tools/simulator](./tools/simulator/README.md).
+
+```sh
+cd tools/simulator
+npm install
+npm start
+```
+
+Then open `http://127.0.0.1:8080`. This simulates the browser-facing behavior of the device, but it is not a full ESP8266 CPU emulator.
+
 ### Known Issues
 * You need to connect your MFRC522 reader to your ESP properly or you will end up with a boot loop
 * Please also check [GitHub issues](https://github.com/esprfid/esp-rfid/issues).

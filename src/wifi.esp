@@ -3,33 +3,30 @@ void setEnableWifi()
 	doEnableWifi = true;
 }
 
+void requestWifiReconnect()
+{
+	shouldReconnectWifi = true;
+}
+
 void onWifiConnect(const WiFiEventStationModeConnected &event)
 {
 #ifdef DEBUG
 	Serial.println(F("[ INFO ] WiFi STA Connected"));
 #endif
 	mqttReconnectTimer.detach();
-	if (!wifiReconnectTimer.active() && !config.fallbackMode)
-	{
-		wifiReconnectTimer.once(300, setEnableWifi);
-	}
 	ledWifiOff();
 }
 
 void onWifiDisconnect(const WiFiEventStationModeDisconnected &event)
 {
-	if ( !WiFi.isConnected() )
-	{
-		return;
-	}
 #ifdef DEBUG
 	Serial.println(F("[ INFO ] WiFi STA Disconnected"));
 #endif
 	mqttReconnectTimer.detach();
 	disconnectMqtt();
-	if (!wifiReconnectTimer.active() && !config.fallbackMode)
+	if (!wifiReconnectTimer.active() && esprfid::shouldScheduleWifiReconnect(wifiDisabledByPolicy, config.fallbackMode))
 	{
-		wifiReconnectTimer.once(300, setEnableWifi);
+		wifiReconnectTimer.once(300, requestWifiReconnect);
 	}
 	ledWifiOff();
 }
@@ -186,7 +183,7 @@ bool ICACHE_FLASH_ATTR connectSTA(const char *ssid, const char *password, byte b
 				Serial.println();
 				Serial.println(F("[ INFO ] trying to reconnect to WiFi"));
 			#endif
-			wifiReconnectTimer.once(300, setEnableWifi);
+			wifiReconnectTimer.once(300, requestWifiReconnect);
 		}
 		return false;
 	}
@@ -195,6 +192,8 @@ bool ICACHE_FLASH_ATTR connectSTA(const char *ssid, const char *password, byte b
 void ICACHE_FLASH_ATTR disableWifi()
 {
 	wiFiUptimeMillis = 0;
+	shouldReconnectWifi = false;
+	wifiDisabledByPolicy = true;
 	WiFi.disconnect(true);
 	WiFi.softAPdisconnect(true);
 #ifdef DEBUG
@@ -205,6 +204,8 @@ void ICACHE_FLASH_ATTR disableWifi()
 void ICACHE_FLASH_ATTR enableWifi()
 {
 	wiFiUptimeMillis = 0;
+	shouldReconnectWifi = false;
+	wifiDisabledByPolicy = false;
 	if (config.accessPointMode)
 	{
 		startAP(config.accessPointIp, config.accessPointSubnetIp, config.networkHidden, config.ssid, config.wifiPassword);

@@ -466,6 +466,17 @@ void deleteUserID(const char *uid)
 
 void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total)
 {
+	if (total >= MAX_MQTT_BUFFER)
+	{
+#ifdef DEBUG
+		if (index == 0)
+		{
+			Serial.println("[ WARN ] Dropping MQTT message, payload too large");
+		}
+#endif
+		return;
+	}
+
 	size_t n = 0;
 	size_t i = index;
 	while(n < len) {
@@ -503,8 +514,12 @@ void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties 
 	}
 	
 	const char *ipadr = mqttIncomingJson["doorip"];
+	if (ipadr == NULL)
+	{
+		return;
+	}
 	String espIp = WiFi.localIP().toString();
-	if (!((strcmp(ipadr, espIp.c_str()) == 0) && (ipadr != NULL)))
+	if (strcmp(ipadr, espIp.c_str()) != 0)
 	{
 #ifdef DEBUG
 		Serial.print("[ INFO ] ESP  IP: ");
@@ -524,15 +539,15 @@ void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties 
 		return;
 	}
 
-	MqttMessage* incomingMessage = new MqttMessage;
-	if (mqttIncomingJson.containsKey("cmd")) {
-		strlcpy(incomingMessage->command, mqttIncomingJson["cmd"], sizeof(incomingMessage->command));
-	} else {
+	if (!mqttIncomingJson.containsKey("cmd") || mqttIncomingJson["cmd"].isNull()) {
 #ifdef DEBUG
 		Serial.println("[ INFO ] No cmd key in MQTT message");
 #endif
 		return;
 	}
+
+	MqttMessage* incomingMessage = new MqttMessage();
+	strlcpy(incomingMessage->command, mqttIncomingJson["cmd"], sizeof(incomingMessage->command));
 	if (mqttIncomingJson.containsKey("uid")) {
 		strlcpy(incomingMessage->uid, mqttIncomingJson["uid"], sizeof(incomingMessage->uid));
 	}
@@ -542,7 +557,7 @@ void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties 
 	if (mqttIncomingJson.containsKey("door")) {
 		strlcpy(incomingMessage->door, mqttIncomingJson["door"], sizeof(incomingMessage->door));
 	}
-	strlcpy(incomingMessage->serializedMessage, mqttBuffer, sizeof(mqttBuffer));
+	strlcpy(incomingMessage->serializedMessage, mqttBuffer, sizeof(incomingMessage->serializedMessage));
 
 	MqttMessage* lastMessage = mqttMessageQueue;
 	if(lastMessage == NULL)
@@ -560,6 +575,7 @@ void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties 
 
 void processMqttMessage(MqttMessage *incomingMessage)
 {
+	std::unique_ptr<MqttMessage> messageGuard(incomingMessage);
 	char *command = incomingMessage->command;
 	if (strcmp(command, "getuserlist") == 0)
 	{
@@ -588,9 +604,12 @@ void processMqttMessage(MqttMessage *incomingMessage)
 #endif
 		writeLatest(" ", "MQTT", 1);
 		mqttPublishAccess(epoch, "true", "Always", "MQTT", " ", " ");
-		const char *door = incomingMessage->door;
-		String stringDoor = String(door);
-		int currentRelay = stringDoor.toInt();
+		int currentRelay = -1;
+		if (!esprfid::tryParseRelayIndex(incomingMessage->door, config.numRelays, currentRelay))
+		{
+			writeEvent("WARN", "mqtt", "Invalid relay index for open command", incomingMessage->door);
+			return;
+		}
 		if (digitalRead(config.relayPin[currentRelay]) == !config.relayType[currentRelay])
 		{
 			activateRelay[currentRelay] = true;
@@ -604,9 +623,12 @@ void processMqttMessage(MqttMessage *incomingMessage)
 #endif
 		writeLatest(" ", "MQTT", 1);
 		mqttPublishAccess(epoch, "true", "Always", "MQTT", " ", " ");
-		const char *door = incomingMessage->door;
-		String stringDoor = String(door);
-		int currentRelay = stringDoor.toInt();
+		int currentRelay = -1;
+		if (!esprfid::tryParseRelayIndex(incomingMessage->door, config.numRelays, currentRelay))
+		{
+			writeEvent("WARN", "mqtt", "Invalid relay index for close command", incomingMessage->door);
+			return;
+		}
 		if (digitalRead(config.relayPin[currentRelay]) == config.relayType[currentRelay])
 		{
 			activateRelay[currentRelay] = true;
@@ -706,7 +728,6 @@ void processMqttMessage(MqttMessage *incomingMessage)
 		}
 	}
 
-	free(incomingMessage);
 	return;
 }
 

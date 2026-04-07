@@ -316,13 +316,6 @@ void pinCodeRead()
 	}
 }
 
-int weekdayFromMonday(int weekdayFromSunday) {
-	// we expect weeks starting from Sunday equals to 1
-	// we return week day starting from Monday equals to 0
-	return ( weekdayFromSunday + 5 ) % 7;
-}
-
-
 /*
  *  If we have successfully read an RFID card, check if access
  *  should be granted
@@ -386,7 +379,8 @@ void rfidProcess()
 
 	// if the pin code is wrong we deny access
 	// pinCode is equal to uid if we allow pin code only access
-	if(config.pinCodeRequested && pinCode != json["pincode"] && pinCode != uid && json["pincode"] != "")
+	const char *storedPinCode = json["pincode"] | "";
+	if (!esprfid::isPinCodeAccepted(config.pinCodeRequested, pinCode.c_str(), storedPinCode, uid.c_str()))
 	{
 		processingState = wrongPincode;
 #ifdef DEBUG
@@ -411,41 +405,36 @@ void rfidProcess()
 	Serial.print("'");
 #endif
 
-	if (accountType == ACCESS_GRANTED)
-	{
-		/*
-		 *  Normal user - relay but no admin access
-		 */
-		unsigned long validSinceL = json["validsince"];
-		unsigned long validUntilL = json["validuntil"];
-		unsigned long nowL = epoch;
-		int hourTz = timeinfo.tm_hour;
+	unsigned long validSinceL = json["validsince"];
+	unsigned long validUntilL = json["validuntil"];
+	esprfid::AccessEvaluation accessEvaluation = esprfid::evaluateAccountAccess(
+		accountType,
+		validSinceL,
+		validUntilL,
+		epoch,
+		config.openingHours,
+		weekday(epoch),
+		timeinfo.tm_hour);
 
-		if (validUntilL < nowL || validSinceL > nowL)
-		{
-			processingState = expired;
-		} else if (config.openingHours[weekdayFromMonday(weekday(epoch))][hourTz] != '1')
-		{
-			processingState = notValid;
-		} else
-		{
-			processingState = valid;
-		}
-	} else if (accountType == ACCESS_ADMIN)
+	switch (accessEvaluation)
 	{
-		/*
-		 *  Admin user - enable relay (with no time limits) and wifi
-		 */
+	case esprfid::AccessEvaluation::Granted:
+		processingState = valid;
+		break;
+	case esprfid::AccessEvaluation::Admin:
 #ifdef DEBUG
 		Serial.println(" has admin access, enable wifi");
 #endif
 		doEnableWifi = true;
 		processingState = validAdmin;
-	} else {
-		/*
-		 *  User exists but does not have access
-		 */
+		break;
+	case esprfid::AccessEvaluation::Expired:
+		processingState = expired;
+		break;
+	case esprfid::AccessEvaluation::Denied:
+	default:
 		processingState = notValid;
+		break;
 	}
 
 	/*

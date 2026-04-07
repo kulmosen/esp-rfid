@@ -1,3 +1,280 @@
+namespace
+{
+char *duplicateString(const std::string &value)
+{
+	return strdup(value.c_str());
+}
+
+void configureOptionalOutputPin(uint8_t pin, uint8_t inactiveState)
+{
+	if (pin == 255)
+	{
+		return;
+	}
+
+	pinMode(pin, OUTPUT);
+	digitalWrite(pin, inactiveState);
+}
+
+void configureOptionalInputPin(uint8_t pin)
+{
+	if (pin == 255)
+	{
+		return;
+	}
+
+	pinMode(pin, INPUT);
+}
+
+void loadStringIfPresent(std::string &target, JsonObject source, const char *key)
+{
+	if (source.containsKey(key) && !source[key].isNull())
+	{
+		target = source[key].as<const char *>();
+	}
+}
+
+esprfid::ConfigModel parseConfigModel(JsonObject network, JsonObject hardware, JsonObject general, JsonObject mqtt, JsonObject ntp)
+{
+	esprfid::ConfigModel model;
+
+	model.wifiLedPin = hardware["wifipin"] | model.wifiLedPin;
+	model.doorstatPin = hardware["doorstatpin"] | model.doorstatPin;
+	model.maxOpenDoorTime = hardware["maxOpenDoorTime"] | model.maxOpenDoorTime;
+	model.doorbellPin = hardware["doorbellpin"] | model.doorbellPin;
+	model.accessDeniedPin = hardware["accessdeniedpin"] | model.accessDeniedPin;
+	model.beeperPin = hardware["beeperpin"] | model.beeperPin;
+	model.ledWaitingPin = hardware["ledwaitingpin"] | model.ledWaitingPin;
+	model.openLockPin = hardware["openlockpin"] | model.openLockPin;
+	model.numRelays = hardware["numrelays"] | model.numRelays;
+	model.readertype = hardware["readertype"] | model.readertype;
+	model.wiegandD0Pin = hardware["wgd0pin"] | model.wiegandD0Pin;
+	model.wiegandD1Pin = hardware["wgd1pin"] | model.wiegandD1Pin;
+	model.rdm6300Pin = hardware["rdm6300pin"] | model.rdm6300Pin;
+	model.rfidSsPin = hardware["sspin"] | model.rfidSsPin;
+	model.rfidGain = hardware["rfidgain"] | model.rfidGain;
+	model.pinCodeRequested = hardware["requirepincodeafterrfid"] | model.pinCodeRequested;
+	model.pinCodeOnly = hardware["allowpincodeonly"] | model.pinCodeOnly;
+	model.removeParityBits = hardware["removeparitybits"] | model.removeParityBits;
+	model.relays[0].activateTime = hardware["rtime"] | model.relays[0].activateTime;
+	model.relays[0].lockType = hardware["ltype"] | model.relays[0].lockType;
+	model.relays[0].relayType = hardware["rtype"] | model.relays[0].relayType;
+	model.relays[0].relayPin = hardware["rpin"] | model.relays[0].relayPin;
+
+	if (hardware.containsKey("useridstoragemode"))
+	{
+		model.wiegandReadHex = String(hardware["useridstoragemode"].as<const char *>()) == "hexadecimal";
+	}
+	loadStringIfPresent(model.relays[0].doorName, hardware, "doorname");
+
+	for (int relayIndex = 1; relayIndex < MAX_NUM_RELAYS; ++relayIndex)
+	{
+		String relayKey = "relay" + String(relayIndex + 1);
+		if (!hardware.containsKey(relayKey))
+		{
+			continue;
+		}
+
+		JsonObject relay = hardware[relayKey];
+		model.relays[relayIndex].activateTime = relay["rtime"] | model.relays[relayIndex].activateTime;
+		model.relays[relayIndex].lockType = relay["ltype"] | model.relays[relayIndex].lockType;
+		model.relays[relayIndex].relayType = relay["rtype"] | model.relays[relayIndex].relayType;
+		model.relays[relayIndex].relayPin = relay["rpin"] | model.relays[relayIndex].relayPin;
+		loadStringIfPresent(model.relays[relayIndex].doorName, relay, "doorname");
+	}
+
+	model.fallbackMode = (network["fallbackmode"] | (model.fallbackMode ? 1 : 0)) == 1;
+	model.autoRestartIntervalSeconds = general["restart"] | model.autoRestartIntervalSeconds;
+	model.wifiTimeout = network["offtime"] | model.wifiTimeout;
+	model.accessPointMode = (network["wmode"] | (model.accessPointMode ? 1 : 0)) == 1;
+	model.networkHidden = (network["hide"] | (model.networkHidden ? 1 : 0)) == 1;
+	model.dhcpEnabled = (network["dhcp"] | (model.dhcpEnabled ? 1 : 0)) == 1;
+
+	loadStringIfPresent(model.bssid, network, "bssid");
+	loadStringIfPresent(model.ssid, network, "ssid");
+	loadStringIfPresent(model.wifiPassword, network, "pswd");
+	loadStringIfPresent(model.wifiApIp, network, "apip");
+	loadStringIfPresent(model.wifiApSubnet, network, "apsubnet");
+	loadStringIfPresent(model.ipAddress, network, "ip");
+	loadStringIfPresent(model.subnet, network, "subnet");
+	loadStringIfPresent(model.gateway, network, "gateway");
+	loadStringIfPresent(model.dns, network, "dns");
+
+	loadStringIfPresent(model.deviceHostname, general, "hostnm");
+	loadStringIfPresent(model.httpPass, general, "pswd");
+
+	JsonArray openingHours = general["openinghours"].as<JsonArray>();
+	if (!openingHours.isNull())
+	{
+		for (std::size_t dayIndex = 0; dayIndex < model.openingHours.size(); ++dayIndex)
+		{
+			if (!openingHours[dayIndex].isNull())
+			{
+				model.openingHours[dayIndex] = openingHours[dayIndex].as<const char *>();
+			}
+		}
+	}
+
+	loadStringIfPresent(model.ntpServer, ntp, "server");
+	model.ntpInterval = ntp["interval"] | model.ntpInterval;
+	if (ntp.containsKey("timezone"))
+	{
+		model.hasLegacyTimezone = true;
+		model.legacyTimezone = ntp["timezone"].as<double>();
+	}
+	loadStringIfPresent(model.tzInfo, ntp, "tzinfo");
+
+	model.mqttEnabled = (mqtt["enabled"] | (model.mqttEnabled ? 1 : 0)) == 1;
+	model.mqttPort = mqtt["port"] | model.mqttPort;
+	model.mqttAutoTopic = mqtt["autotopic"] | model.mqttAutoTopic;
+	model.mqttInterval = mqtt["syncrate"] | model.mqttInterval;
+	model.mqttEvents = (mqtt["mqttlog"] | (model.mqttEvents ? 1 : 0)) == 1;
+	model.mqttHA = (mqtt["mqttha"] | (model.mqttHA ? 1 : 0)) == 1;
+	loadStringIfPresent(model.mqttHost, mqtt, "host");
+	loadStringIfPresent(model.mqttUser, mqtt, "user");
+	loadStringIfPresent(model.mqttPass, mqtt, "pswd");
+	loadStringIfPresent(model.mqttTopic, mqtt, "topic");
+
+	esprfid::normalizeConfigModel(model);
+	return model;
+}
+
+void applyReaderConfiguration(const esprfid::ConfigModel &model, Config &config)
+{
+	config.readertype = model.readertype;
+	config.pinCodeRequested = model.pinCodeRequested;
+	config.pinCodeOnly = model.pinCodeOnly;
+	config.removeParityBits = model.removeParityBits;
+	config.wiegandReadHex = model.wiegandReadHex;
+
+	if (config.readertype == READER_WIEGAND || config.readertype == READER_WIEGAND_RDM6300)
+	{
+		setupWiegandReader(model.wiegandD0Pin, model.wiegandD1Pin, config.removeParityBits);
+	}
+	else if (config.readertype == READER_MFRC522 || config.readertype == READER_MFRC522_RDM6300)
+	{
+		setupMFRC522Reader(model.rfidSsPin, model.rfidGain);
+	}
+	else if (config.readertype == READER_PN532 || config.readertype == READER_PN532_RDM6300)
+	{
+		setupPN532Reader(model.rfidSsPin);
+	}
+
+	if (config.readertype > READER_PN532)
+	{
+		setupRDM6300Reader(model.rdm6300Pin);
+	}
+}
+
+void applyRelayConfiguration(const esprfid::ConfigModel &model, Config &config)
+{
+	config.numRelays = model.numRelays;
+	for (int relayIndex = 0; relayIndex < config.numRelays; ++relayIndex)
+	{
+		config.activateTime[relayIndex] = model.relays[relayIndex].activateTime;
+		config.lockType[relayIndex] = model.relays[relayIndex].lockType;
+		config.relayType[relayIndex] = model.relays[relayIndex].relayType;
+		config.relayPin[relayIndex] = model.relays[relayIndex].relayPin;
+		if (!model.relays[relayIndex].doorName.empty())
+		{
+			config.doorName[relayIndex] = duplicateString(model.relays[relayIndex].doorName);
+		}
+		pinMode(config.relayPin[relayIndex], OUTPUT);
+		digitalWrite(config.relayPin[relayIndex], !config.relayType[relayIndex]);
+	}
+}
+
+void applyConfigurationModel(const esprfid::ConfigModel &model, Config &config)
+{
+	config.wifipin = static_cast<uint8_t>(model.wifiLedPin);
+	config.doorstatpin = static_cast<uint8_t>(model.doorstatPin);
+	config.maxOpenDoorTime = static_cast<uint8_t>(model.maxOpenDoorTime);
+	config.doorbellpin = static_cast<uint8_t>(model.doorbellPin);
+	config.accessdeniedpin = static_cast<uint8_t>(model.accessDeniedPin);
+	config.beeperpin = static_cast<uint8_t>(model.beeperPin);
+	config.ledwaitingpin = static_cast<uint8_t>(model.ledWaitingPin);
+	config.openlockpin = static_cast<uint8_t>(model.openLockPin);
+
+	configureOptionalOutputPin(config.wifipin, LEDoff);
+	configureOptionalInputPin(config.doorstatpin);
+	configureOptionalInputPin(config.doorbellpin);
+	configureOptionalOutputPin(config.accessdeniedpin, LOW);
+	configureOptionalOutputPin(config.beeperpin, BEEPERoff);
+	configureOptionalOutputPin(config.ledwaitingpin, LEDoff);
+	if (config.openlockpin != 255)
+	{
+		openLockButton = Bounce();
+		openLockButton.attach(config.openlockpin, INPUT_PULLUP);
+		openLockButton.interval(30);
+	}
+
+	applyReaderConfiguration(model, config);
+
+	config.fallbackMode = model.fallbackMode;
+	config.autoRestartIntervalSeconds = model.autoRestartIntervalSeconds;
+	config.wifiTimeout = model.wifiTimeout;
+	memset(config.bssid, 0, sizeof(config.bssid));
+	if (!model.bssid.empty())
+	{
+		parseBytes(model.bssid.c_str(), ':', config.bssid, 6, 16);
+	}
+
+	config.deviceHostname = duplicateString(model.deviceHostname);
+	config.ntpServer = duplicateString(model.ntpServer);
+	config.ntpInterval = model.ntpInterval;
+	config.tzInfo = duplicateString(model.tzInfo);
+
+	configTime(0, 0, config.ntpServer);
+	setenv("TZ", config.tzInfo, 1);
+
+	applyRelayConfiguration(model, config);
+
+	config.ssid = duplicateString(model.ssid);
+	config.wifiPassword = duplicateString(model.wifiPassword);
+	config.accessPointMode = model.accessPointMode;
+	config.wifiApIp = duplicateString(model.wifiApIp);
+	config.wifiApSubnet = duplicateString(model.wifiApSubnet);
+	config.networkHidden = model.networkHidden;
+	config.httpPass = duplicateString(model.httpPass);
+	config.dhcpEnabled = model.dhcpEnabled;
+	config.ipAddress.fromString(model.ipAddress.c_str());
+	config.subnetIp.fromString(model.subnet.c_str());
+	config.gatewayIp.fromString(model.gateway.c_str());
+	config.dnsIp.fromString(model.dns.c_str());
+	config.accessPointIp.fromString(model.wifiApIp.c_str());
+	config.accessPointSubnetIp.fromString(model.wifiApSubnet.c_str());
+
+	ws.setAuthentication("admin", config.httpPass);
+
+	for (std::size_t dayIndex = 0; dayIndex < model.openingHours.size(); ++dayIndex)
+	{
+		config.openingHours[dayIndex] = duplicateString(model.openingHours[dayIndex]);
+	}
+
+	config.mqttEnabled = model.mqttEnabled;
+	config.mqttAutoTopic = model.mqttAutoTopic;
+	config.mqttInterval = model.mqttInterval;
+	config.mqttEvents = model.mqttEvents;
+	config.mqttHA = model.mqttHA;
+	if (config.mqttEnabled)
+	{
+		config.mqttHost = duplicateString(model.mqttHost);
+		config.mqttPort = model.mqttPort;
+		config.mqttUser = duplicateString(model.mqttUser);
+		config.mqttPass = duplicateString(model.mqttPass);
+
+		std::string mqttTopic = model.mqttTopic;
+		if (model.mqttAutoTopic)
+		{
+			uint8_t macAddr[6];
+			WiFi.softAPmacAddress(macAddr);
+			mqttTopic = esprfid::buildAutoTopic(mqttTopic.c_str(), macAddr);
+		}
+		config.mqttTopic = duplicateString(mqttTopic);
+	}
+}
+} // namespace
+
 bool ICACHE_FLASH_ATTR loadConfiguration(Config &config)
 {
 	File configFile = SPIFFS.open("/config.json", "r");
@@ -8,6 +285,7 @@ bool ICACHE_FLASH_ATTR loadConfiguration(Config &config)
 #endif
 		return false;
 	}
+
 	size_t size = configFile.size();
 	std::unique_ptr<char[]> buf(new char[size]);
 	configFile.readBytes(buf.get(), size);
@@ -20,335 +298,15 @@ bool ICACHE_FLASH_ATTR loadConfiguration(Config &config)
 #endif
 		return false;
 	}
+
 #ifdef DEBUG
 	Serial.println(F("[ INFO ] Config file found"));
+	Serial.println(F("[ INFO ] Parsing and applying configuration"));
 #endif
-	JsonObject network = json["network"];
-	JsonObject hardware = json["hardware"];
-	JsonObject general = json["general"];
-	JsonObject mqtt = json["mqtt"];
-	JsonObject ntp = json["ntp"];
-#ifdef DEBUG
-	Serial.println(F("[ INFO ] Trying to setup RFID Hardware"));
-#endif
-	if (hardware.containsKey("wifipin"))
-	{
-		config.wifipin = hardware["wifipin"];
-		if (config.wifipin != 255)
-		{
-			pinMode(config.wifipin, OUTPUT);
-			digitalWrite(config.wifipin, LEDoff);
-		}
-	}
 
-	if (hardware.containsKey("doorstatpin"))
-	{
-		config.doorstatpin = hardware["doorstatpin"];
-		if (config.doorstatpin != 255)
-		{
-			pinMode(config.doorstatpin, INPUT);
-		}
-	}
+	esprfid::ConfigModel model = parseConfigModel(json["network"], json["hardware"], json["general"], json["mqtt"], json["ntp"]);
+	applyConfigurationModel(model, config);
 
-	if (hardware.containsKey("maxOpenDoorTime"))
-	{
-		config.maxOpenDoorTime = hardware["maxOpenDoorTime"];
-	}
-
-	if (hardware.containsKey("doorbellpin"))
-	{
-		config.doorbellpin = hardware["doorbellpin"];
-		if (config.doorbellpin != 255)
-		{
-			pinMode(config.doorbellpin, INPUT);
-		}
-	}
-
-	if (hardware.containsKey("accessdeniedpin"))
-	{
-		config.accessdeniedpin = hardware["accessdeniedpin"];
-		if (config.accessdeniedpin != 255)
-		{
-			pinMode(config.accessdeniedpin, OUTPUT);
-			digitalWrite(config.accessdeniedpin, LOW);
-		}
-	}
-
-	if (hardware.containsKey("beeperpin"))
-	{
-		config.beeperpin = hardware["beeperpin"];
-		if (config.beeperpin != 255)
-		{
-			pinMode(config.beeperpin, OUTPUT);
-			digitalWrite(config.beeperpin, BEEPERoff);
-		}
-	}
-
-	if (hardware.containsKey("ledwaitingpin"))
-	{
-		config.ledwaitingpin = hardware["ledwaitingpin"];
-		if (config.ledwaitingpin != 255)
-		{
-			pinMode(config.ledwaitingpin, OUTPUT);
-			digitalWrite(config.ledwaitingpin, LEDoff);
-		}
-	}
-
-	if (hardware.containsKey("openlockpin"))
-	{
-		config.openlockpin = hardware["openlockpin"];
-		if (config.openlockpin != 255)
-		{
-			openLockButton = Bounce();
-			openLockButton.attach(config.openlockpin, INPUT_PULLUP);
-			openLockButton.interval(30);
-		}
-	}
-
-	if (hardware.containsKey("numrelays"))
-	{
-		config.numRelays = hardware["numrelays"];
-	}
-	else
-		config.numRelays = 1;
-
-	config.readertype = hardware["readertype"];
-	int rfidss;
-	config.pinCodeRequested = false;
-	config.pinCodeOnly = false;
-	if (config.readertype == READER_WIEGAND || config.readertype == READER_WIEGAND_RDM6300)
-	{
-		int wgd0pin = hardware["wgd0pin"];
-		int wgd1pin = hardware["wgd1pin"];
-		if (hardware.containsKey("requirepincodeafterrfid"))
-		{
-			config.pinCodeRequested = hardware["requirepincodeafterrfid"];
-		}
-		if (hardware.containsKey("allowpincodeonly"))
-		{
-			config.pinCodeOnly = hardware["allowpincodeonly"];
-		}
-		if (hardware.containsKey("removeparitybits"))
-		{
-			config.removeParityBits = hardware["removeparitybits"];
-		}
-		if (hardware.containsKey("useridstoragemode"))
-		{
-			config.wiegandReadHex = hardware["useridstoragemode"] == "hexadecimal";
-		}
-		setupWiegandReader(wgd0pin, wgd1pin, config.removeParityBits); // also some other settings like weather to use keypad or not, LED pin, BUZZER pin, Wiegand 26/34 version
-	}
-	else if (config.readertype == READER_MFRC522 || config.readertype == READER_MFRC522_RDM6300)
-	{
-		rfidss = 15;
-		if (hardware.containsKey("sspin"))
-		{
-			rfidss = hardware["sspin"];
-		}
-		int rfidgain = hardware["rfidgain"];
-		setupMFRC522Reader(rfidss, rfidgain);
-	}
-	else if (config.readertype == READER_PN532 || config.readertype == READER_PN532_RDM6300)
-	{
-		rfidss = hardware["sspin"];
-		setupPN532Reader(rfidss);
-	}
-	// RDM6300 can be configured alongside the other readers
-	if (config.readertype > READER_PN532)
-	{
-		int rmd6300TxPin = hardware["rdm6300pin"];
-		setupRDM6300Reader(rmd6300TxPin);
-	}
-
-	if (network.containsKey("fallbackmode"))
-	{
-		config.fallbackMode = network["fallbackmode"] == 1;
-	}
-	config.autoRestartIntervalSeconds = general["restart"];
-	config.wifiTimeout = network["offtime"];
-	const char *bssidmac = network["bssid"];
-	if (strlen(bssidmac) > 0)
-		parseBytes(bssidmac, ':', config.bssid, 6, 16);
-	if (general.containsKey("hostnm"))
-	{
-		config.deviceHostname = strdup(general["hostnm"]);
-	}
-	if (ntp.containsKey("server"))
-	{
-		config.ntpServer = strdup(ntp["server"]);
-	}
-	config.ntpInterval = ntp["interval"];
-	
-	// support for old config
-	if (ntp.containsKey("timezone"))
-	{
-		config.tzInfo = (char *) malloc(10 * sizeof(char));
-		float tz = ntp["timezone"];
-		if(tz > 0)
-		{
-			snprintf(config.tzInfo, 10, "UTC+%.2f", tz);
-		}
-		else if(tz < 0)
-		{
-			snprintf(config.tzInfo, 10, "UTC-%.2f", tz);
-		}
-		else
-		{
-			snprintf(config.tzInfo, 10, "UTC");
-		}
-	}
-	if (ntp.containsKey("tzinfo"))
-	{
-		config.tzInfo = (char *) malloc(strlen(ntp["tzinfo"]) * sizeof(char));
-		config.tzInfo = strdup(ntp["tzinfo"]);
-	}
-	configTime(0, 0, config.ntpServer);
-	// See https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv for Timezone codes for your region
-	setenv("TZ", config.tzInfo, 1);
-
-	config.activateTime[0] = hardware["rtime"];
-	config.lockType[0] = hardware["ltype"];
-	config.relayType[0] = hardware["rtype"];
-	if (hardware.containsKey("doorname"))
-	{
-		config.doorName[0] = strdup(hardware["doorname"]);
-	}
-
-	config.relayPin[0] = hardware["rpin"];
-	pinMode(config.relayPin[0], OUTPUT);
-	digitalWrite(config.relayPin[0], !config.relayType[0]);
-
-	for (int i = 1; i < config.numRelays; i++)
-	{
-		JsonObject relay = hardware["relay" + String((i + 1))];
-		config.activateTime[i] = relay["rtime"];
-		config.lockType[i] = relay["ltype"];
-		config.relayType[i] = relay["rtype"];
-		config.relayPin[i] = relay["rpin"];
-		if (relay.containsKey("doorname"))
-		{
-			config.doorName[i]= strdup(relay["doorname"]);
-		}
-		pinMode(config.relayPin[i], OUTPUT);
-		digitalWrite(config.relayPin[i], !config.relayType[i]);
-	}
-
-	if (network.containsKey("ssid"))
-	{
-		config.ssid = strdup(network["ssid"]);
-	}
-	if (network.containsKey("pswd"))
-	{
-		config.wifiPassword = strdup(network["pswd"]);
-	}
-	config.accessPointMode = network["wmode"] == 1;
-	if (network.containsKey("apip"))
-	{
-		config.wifiApIp = strdup(network["apip"]);
-	}
-	if (network.containsKey("apsubnet"))
-	{
-		config.wifiApSubnet = strdup(network["apsubnet"]);
-	}
-	config.networkHidden = network["hide"] == 1;
-	if (general.containsKey("pswd"))
-	{
-		config.httpPass = strdup(general["pswd"]);
-	}
-	config.dhcpEnabled = network["dhcp"] == 1;
-	if (network.containsKey("ip"))
-	{
-		config.ipAddress.fromString(network["ip"].as<const char*>());
-	}
-	if (network.containsKey("subnet"))
-	{
-		config.subnetIp.fromString(network["subnet"].as<const char*>());
-	}
-	if (network.containsKey("gateway"))
-	{
-		config.gatewayIp.fromString(network["gateway"].as<const char*>());
-	}
-	if (network.containsKey("dns"))
-	{
-		config.dnsIp.fromString(network["dns"].as<const char*>());
-	}
-
-	const char *apipch;
-	if (config.wifiApIp)
-	{
-		apipch = config.wifiApIp;
-	}
-	else
-	{
-		apipch = "192.168.4.1";
-	}
-	const char *apsubnetch;
-	if (config.wifiApSubnet)
-	{
-		apsubnetch = config.wifiApSubnet;
-	}
-	else
-	{
-		apsubnetch = "255.255.255.0";
-	}
-	config.accessPointIp.fromString(apipch);
-	config.accessPointSubnetIp.fromString(apsubnetch);
-
-	ws.setAuthentication("admin", config.httpPass);
-
-	for (int d = 0; d < 7; d++)
-	{
-		if (general.containsKey("openinghours"))
-		{
-			config.openingHours[d] = strdup(general["openinghours"][d].as<const char *>());
-		}
-		else
-		{
-			config.openingHours[d] = strdup("111111111111111111111111");
-		}
-	}
-
-	config.mqttEnabled = mqtt["enabled"] == 1;
-
-	if (config.mqttEnabled)
-	{
-		String mhsString = mqtt["host"];
-		config.mqttHost = strdup(mhsString.c_str());
-		config.mqttPort = mqtt["port"];
-		String muserString = mqtt["user"];
-		config.mqttUser = strdup(muserString.c_str());
-		String mpasString = mqtt["pswd"];
-		config.mqttPass = strdup(mpasString.c_str());
-		String mqttTopicString = mqtt["topic"];
-		config.mqttTopic = strdup(mqttTopicString.c_str());
-		if (mqtt.containsKey("autotopic"))
-		{
-			config.mqttAutoTopic = mqtt["autotopic"];
-		}
-		if (config.mqttAutoTopic)
-		{
-			uint8_t macAddr[6];
-			WiFi.softAPmacAddress(macAddr);
-			char topicSuffix[7];
-			sprintf(topicSuffix, "-%02x%02x%02x", macAddr[3], macAddr[4], macAddr[5]);
-			char *newTopic = (char *)malloc(sizeof(char) * 80);
-			strcpy(newTopic, config.mqttTopic);
-			strcat(newTopic, topicSuffix);
-			config.mqttTopic = newTopic;
-		}
-		if (mqtt.containsKey("syncrate"))
-		{
-			config.mqttInterval = mqtt["syncrate"];
-		}
-		if (mqtt.containsKey("mqttlog"))
-		{
-			config.mqttEvents = mqtt["mqttlog"] == 1;
-		}
-		if (mqtt.containsKey("mqttha"))
-		{
-			config.mqttHA = mqtt["mqttha"] == 1;
-		}
-	}
 #ifdef DEBUG
 	Serial.println(F("[ INFO ] Configuration done."));
 #endif
