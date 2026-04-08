@@ -701,10 +701,10 @@ function listSCAN(obj) {
       $(".fooicon-search").click();
     } else {
       $(".footable-add").click();
-      document.getElementById("uid").value = obj.uid;
-      document.getElementById("picctype").value = obj.type;
-      document.getElementById("username").value = obj.user;
-      document.getElementById("acctype").value = obj.acctype;
+      document.getElementById("uid").value = obj.uid || "";
+      document.getElementById("picctype").value = obj.type || "";
+      document.getElementById("username").value = obj.user || "";
+      document.getElementById("acctype").value = obj.hasOwnProperty("acctype") ? obj.acctype : 1;
     }
   }
 }
@@ -2006,12 +2006,27 @@ function keepWSConnectionOpen() {
   }
 }
 
+function getWebSocketOverrideUri() {
+  if (!window.location.search) {
+    return "";
+  }
+
+  try {
+    return new URLSearchParams(window.location.search).get("ws") || "";
+  } catch (e) {
+    return "";
+  }
+}
+
 function connectWS() {
   if(wsConnectionPresent) {
     return;
   }
 
-  if (window.location.protocol === "https:") {
+  var wsOverrideUri = getWebSocketOverrideUri();
+  if (wsOverrideUri) {
+    wsUri = wsOverrideUri;
+  } else if (window.location.protocol === "https:") {
     wsUri = "wss://" + window.location.hostname + ":" + window.location.port + "/ws";
   } else if (window.location.protocol === "file:" ||
       ["0.0.0.0", "localhost", "127.0.0.1"].includes(window.location.hostname)) {

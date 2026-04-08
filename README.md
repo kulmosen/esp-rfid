@@ -155,6 +155,8 @@ cd tools/simulator
 npm run e2e
 ```
 
+That test now exercises invalid config rejection, config save, user creation from a scanned tag, and access/event log rendering.
+
 ### Known Issues
 * You need to connect your MFRC522 reader to your ESP properly or you will end up with a boot loop
 * Please also check [GitHub issues](https://github.com/esprfid/esp-rfid/issues).

@@ -77,3 +77,11 @@ Run the browser-based end-to-end test:
 ```sh
 npm run e2e
 ```
+
+The browser scenario covers:
+
+* rejected invalid config saves
+* editing and committing general settings
+* adding a user from an unknown RFID scan
+* replaying a known RFID scan
+* verifying access log and event log views
