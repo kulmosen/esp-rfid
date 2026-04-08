@@ -5,6 +5,16 @@ logger:
   logs:
     custom_components.esp_rfid_v3: debug
 
+panel_custom:
+  - name: esp-rfid-v3-admin
+    sidebar_title: ESP-RFID V3
+    sidebar_icon: mdi:door-sliding-lock
+    url_path: esp-rfid-v3
+    module_url: /local/esp-rfid-v3-panel.js
+    config:
+      registry_entity: sensor.esp_rfid_v3_registry
+      integration_domain: esp_rfid_v3
+
 http:
   use_x_forwarded_for: true
   trusted_proxies:

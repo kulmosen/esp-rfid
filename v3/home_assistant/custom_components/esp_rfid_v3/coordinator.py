@@ -47,11 +47,17 @@ class EspRfidV3Coordinator(DataUpdateCoordinator[dict[str, DoorNodeStatus]]):
         self._store = store
         self._api_factory = api_factory
         self._doors: dict[str, DoorNodeConfig] = {}
+        self._users: dict[str, "AccessUser"] = {}
 
     @property
     def doors(self) -> dict[str, DoorNodeConfig]:
         """Return configured doors."""
         return dict(self._doors)
+
+    @property
+    def users(self) -> dict[str, "AccessUser"]:
+        """Return configured users."""
+        return dict(self._users)
 
     def get_door(self, device_id: str) -> DoorNodeConfig:
         """Return a configured door."""
@@ -65,6 +71,7 @@ class EspRfidV3Coordinator(DataUpdateCoordinator[dict[str, DoorNodeStatus]]):
     async def _async_update_data(self) -> dict[str, DoorNodeStatus]:
         """Refresh all door statuses."""
         self._doors = await self._store.async_get_doors()
+        self._users = await self._store.async_get_users()
         result: dict[str, DoorNodeStatus] = {}
 
         for device_id, door in self._doors.items():
@@ -116,3 +123,6 @@ class EspRfidV3Coordinator(DataUpdateCoordinator[dict[str, DoorNodeStatus]]):
         client = self._api_factory.create(door)
         await client.async_push_snapshot(payload)
         await self.async_request_refresh()
+
+
+from .models import AccessUser  # noqa: E402

@@ -28,7 +28,8 @@ docker compose down
 1. Åbn `http://127.0.0.1:8123`
 2. Gennemfør Home Assistant onboarding
 3. Tilføj integrationen `ESP-RFID V3`
-4. Registrér dørnode-services manuelt via Developer Tools eller senere via UI
+4. Åbn sidebar-punktet `ESP-RFID V3`
+5. Registrér dørnoder og brugere direkte i admin-panelet
 
 ## Demo dørdata
 
@@ -60,6 +61,21 @@ enabled: true
 ```
 
 Gentag med `backdoor` for den anden simulator.
+
+Eksempel på bruger:
+
+Service: `esp_rfid_v3.register_user`
+
+```yaml
+user_id: dennis
+name: Dennis
+door_ids:
+  - frontdoor
+  - backdoor
+rfid_uid: A1B2C3D4
+pin: "1234"
+active: true
+```
 
 ## Smoke Test
 

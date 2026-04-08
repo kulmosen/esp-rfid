@@ -26,7 +26,8 @@ async def async_setup_entry(
     """Set up sensor entities from a config entry."""
     runtime: EspRfidV3RuntimeData = entry.runtime_data
     entities: list[SensorEntity] = [
-        EspRfidV3ConfiguredDoorsSensor(runtime.coordinator, runtime.site_name)
+        EspRfidV3ConfiguredDoorsSensor(runtime.coordinator, runtime.site_name),
+        EspRfidV3RegistrySensor(runtime),
     ]
 
     for door in runtime.coordinator.doors.values():
@@ -141,3 +142,69 @@ class EspRfidV3CredentialCountSensor(EspRfidV3DoorCoordinatorEntity, SensorEntit
     def native_value(self) -> int:
         """Return credential count."""
         return self.coordinator.get_status(self._door.device_id).credential_count
+
+
+class EspRfidV3RegistrySensor(CoordinatorEntity[EspRfidV3Coordinator], SensorEntity):
+    """Expose a UI-friendly registry summary for doors and users."""
+
+    _attr_has_entity_name = True
+    _attr_name = "ESP-RFID V3 Registry"
+    _attr_unique_id = f"{DOMAIN}_registry"
+    _attr_icon = "mdi:door-sliding-lock"
+
+    def __init__(self, runtime: EspRfidV3RuntimeData) -> None:
+        """Initialize the registry sensor."""
+        super().__init__(runtime.coordinator)
+        self._runtime = runtime
+
+    @property
+    def native_value(self) -> int:
+        """Return the number of centrally managed users."""
+        return len(self.coordinator.users)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        """Return a registry snapshot for the admin panel."""
+        doors = []
+        for door in self.coordinator.doors.values():
+            status = self.coordinator.get_status(door.device_id)
+            doors.append(
+                {
+                    "device_id": door.device_id,
+                    "name": door.name,
+                    "base_url": door.base_url,
+                    "enabled": door.enabled,
+                    "allow_hold_open": door.allow_hold_open,
+                    "available": status.available,
+                    "health_state": status.health_state,
+                    "lock_state": status.lock_state,
+                    "snapshot_version": status.snapshot_version,
+                    "credential_count": status.credential_count,
+                    "event_queue_depth": status.event_queue_depth,
+                    "last_sync_at": status.last_sync_at,
+                    "last_error": status.last_error,
+                }
+            )
+
+        users = []
+        for user in self.coordinator.users.values():
+            users.append(
+                {
+                    "user_id": user.user_id,
+                    "name": user.name,
+                    "door_ids": list(user.door_ids),
+                    "active": user.active,
+                    "has_tag": user.tag_digest is not None,
+                    "has_pin": user.pin_hash is not None,
+                    "valid_from": user.valid_from,
+                    "valid_until": user.valid_until,
+                }
+            )
+
+        return {
+            "site_name": self._runtime.site_name,
+            "door_count": len(doors),
+            "user_count": len(users),
+            "doors": doors,
+            "users": users,
+        }
