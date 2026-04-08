@@ -1,0 +1,13 @@
+{
+  "domain": "esp_rfid_v3",
+  "name": "ESP-RFID V3",
+  "codeowners": [
+    "@kulmosen"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/kulmosen/esp-rfid/tree/codex/v3-architecture/v3/home_assistant",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

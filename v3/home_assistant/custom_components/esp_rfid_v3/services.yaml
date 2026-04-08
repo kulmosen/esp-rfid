@@ -1,0 +1,113 @@
+register_door:
+  name: Register door
+  description: Add or update an ESP-RFID V3 door node in Home Assistant storage.
+  fields:
+    device_id:
+      required: true
+      example: frontdoor
+      selector:
+        text:
+    name:
+      required: true
+      example: Front Door
+      selector:
+        text:
+    base_url:
+      required: true
+      example: http://192.168.1.40
+      selector:
+        text:
+    api_token:
+      required: true
+      example: secret-token
+      selector:
+        text:
+    allow_hold_open:
+      required: false
+      default: true
+      selector:
+        boolean:
+    enabled:
+      required: false
+      default: true
+      selector:
+        boolean:
+
+remove_door:
+  name: Remove door
+  description: Remove a configured door node from Home Assistant storage.
+  fields:
+    device_id:
+      required: true
+      example: frontdoor
+      selector:
+        text:
+
+pulse_unlock:
+  name: Pulse unlock
+  description: Trigger a momentary unlock pulse on a specific door.
+  fields:
+    device_id:
+      required: true
+      example: frontdoor
+      selector:
+        text:
+    reason:
+      required: false
+      example: manual_open
+      selector:
+        text:
+
+hold_unlock:
+  name: Hold unlock
+  description: Hold the unlock output active until it is cancelled.
+  fields:
+    device_id:
+      required: true
+      example: backdoor
+      selector:
+        text:
+    reason:
+      required: false
+      example: cleaning_window
+      selector:
+        text:
+
+cancel_hold:
+  name: Cancel hold
+  description: Cancel a previously activated hold-open state.
+  fields:
+    device_id:
+      required: true
+      example: backdoor
+      selector:
+        text:
+    reason:
+      required: false
+      example: normal_operation
+      selector:
+        text:
+
+resync_door:
+  name: Resync door
+  description: Ask a door node to fetch or apply the latest snapshot.
+  fields:
+    device_id:
+      required: true
+      example: frontdoor
+      selector:
+        text:
+
+sync_all:
+  name: Sync all
+  description: Refresh all configured door nodes in Home Assistant.
+
+reboot_door:
+  name: Reboot door
+  description: Reboot a specific door node.
+  fields:
+    device_id:
+      required: true
+      example: frontdoor
+      selector:
+        text:

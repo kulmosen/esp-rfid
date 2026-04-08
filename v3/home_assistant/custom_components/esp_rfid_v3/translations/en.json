@@ -1,0 +1,17 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up ESP-RFID V3",
+        "description": "Create the central Home Assistant installation entry for ESP-RFID V3.",
+        "data": {
+          "site_name": "Site name",
+          "poll_interval_seconds": "Poll interval (seconds)"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "ESP-RFID V3 has already been configured."
+    }
+  }
+}
