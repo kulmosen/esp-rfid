@@ -14,12 +14,19 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import EspRfidV3ApiClientFactory
 from .const import (
     ATTR_ALLOW_HOLD_OPEN,
+    ATTR_ACTIVE,
     ATTR_API_TOKEN,
     ATTR_BASE_URL,
     ATTR_DEVICE_ID,
+    ATTR_DOOR_IDS,
     ATTR_ENABLED,
     ATTR_NAME,
+    ATTR_PIN,
     ATTR_REASON,
+    ATTR_RFID_UID,
+    ATTR_USER_ID,
+    ATTR_VALID_FROM,
+    ATTR_VALID_UNTIL,
     CONF_SITE_NAME,
     DEFAULT_SITE_NAME,
     DOMAIN,
@@ -27,14 +34,20 @@ from .const import (
     SERVICE_CANCEL_HOLD,
     SERVICE_HOLD_UNLOCK,
     SERVICE_PULSE_UNLOCK,
+    SERVICE_PUSH_ALL_SNAPSHOTS,
+    SERVICE_PUSH_SNAPSHOT,
     SERVICE_REBOOT_DOOR,
     SERVICE_REGISTER_DOOR,
+    SERVICE_REGISTER_USER,
     SERVICE_REMOVE_DOOR,
+    SERVICE_REMOVE_USER,
     SERVICE_RESYNC_DOOR,
     SERVICE_SYNC_ALL,
 )
 from .coordinator import EspRfidV3Coordinator
-from .models import DoorNodeConfig, EspRfidV3RuntimeData
+from .models import AccessUser, DoorNodeConfig, EspRfidV3RuntimeData
+from .security import derive_pin_material, derive_tag_digest, normalize_user_id
+from .snapshot import build_door_snapshot
 from .storage import EspRfidV3Store
 
 
@@ -54,6 +67,19 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     if hass.services.has_service(DOMAIN, SERVICE_REGISTER_DOOR):
         return True
 
+    async def async_push_snapshot_for_door(
+        runtime: EspRfidV3RuntimeData,
+        device_id: str,
+    ) -> None:
+        users = await runtime.store.async_get_users()
+        door = runtime.coordinator.get_door(device_id)
+        snapshot = build_door_snapshot(
+            site_name=runtime.site_name,
+            door=door,
+            users=users,
+        )
+        await runtime.coordinator.async_push_snapshot(device_id, snapshot.to_dict())
+
     async def async_handle_register_door(call: ServiceCall) -> None:
         runtime = _get_runtime(hass)
         door = DoorNodeConfig(
@@ -71,6 +97,66 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         runtime = _get_runtime(hass)
         await runtime.store.async_remove_door(call.data[ATTR_DEVICE_ID])
         await hass.config_entries.async_reload(runtime.entry_id)
+
+    async def async_handle_register_user(call: ServiceCall) -> None:
+        runtime = _get_runtime(hass)
+        site_secret = await runtime.store.async_get_site_secret()
+        user_id = normalize_user_id(call.data[ATTR_USER_ID])
+        if not user_id:
+            raise HomeAssistantError("User id must contain at least one valid character")
+
+        if not call.data.get(ATTR_RFID_UID) and not call.data.get(ATTR_PIN):
+            raise HomeAssistantError("A user must have at least one credential: RFID UID or PIN")
+
+        tag_digest = None
+        if ATTR_RFID_UID in call.data and call.data[ATTR_RFID_UID]:
+            tag_digest = derive_tag_digest(site_secret, call.data[ATTR_RFID_UID])
+
+        pin_hash = None
+        pin_salt = None
+        pin_iterations = None
+        if ATTR_PIN in call.data and call.data[ATTR_PIN]:
+            pin_hash, pin_salt, pin_iterations = derive_pin_material(call.data[ATTR_PIN])
+
+        known_doors = set(runtime.coordinator.doors)
+        door_ids = sorted({str(door_id) for door_id in call.data[ATTR_DOOR_IDS]})
+        if not door_ids:
+            raise HomeAssistantError("A user must be assigned to at least one door")
+        unknown_doors = sorted(set(door_ids) - known_doors)
+        if unknown_doors:
+            raise HomeAssistantError(
+                f"Unknown door ids: {', '.join(unknown_doors)}"
+            )
+
+        user = AccessUser(
+            user_id=user_id,
+            name=call.data[ATTR_NAME],
+            door_ids=door_ids,
+            active=call.data[ATTR_ACTIVE],
+            tag_digest=tag_digest,
+            pin_hash=pin_hash,
+            pin_salt=pin_salt,
+            pin_iterations=pin_iterations,
+            valid_from=call.data.get(ATTR_VALID_FROM),
+            valid_until=call.data.get(ATTR_VALID_UNTIL),
+        )
+        await runtime.store.async_upsert_user(user)
+        await runtime.coordinator.async_request_refresh()
+
+    async def async_handle_remove_user(call: ServiceCall) -> None:
+        runtime = _get_runtime(hass)
+        user_id = normalize_user_id(call.data[ATTR_USER_ID])
+        await runtime.store.async_remove_user(user_id)
+        await runtime.coordinator.async_request_refresh()
+
+    async def async_handle_push_snapshot(call: ServiceCall) -> None:
+        runtime = _get_runtime(hass)
+        await async_push_snapshot_for_door(runtime, call.data[ATTR_DEVICE_ID])
+
+    async def async_handle_push_all_snapshots(call: ServiceCall) -> None:
+        runtime = _get_runtime(hass)
+        for device_id in runtime.coordinator.doors:
+            await async_push_snapshot_for_door(runtime, device_id)
 
     async def async_handle_command(call: ServiceCall, command: str) -> None:
         runtime = _get_runtime(hass)
@@ -121,6 +207,29 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     )
     hass.services.async_register(
         DOMAIN,
+        SERVICE_REGISTER_USER,
+        async_handle_register_user,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_USER_ID): str,
+                vol.Required(ATTR_NAME): str,
+                vol.Required(ATTR_DOOR_IDS): [str],
+                vol.Optional(ATTR_RFID_UID): str,
+                vol.Optional(ATTR_PIN): str,
+                vol.Optional(ATTR_ACTIVE, default=True): bool,
+                vol.Optional(ATTR_VALID_FROM): str,
+                vol.Optional(ATTR_VALID_UNTIL): str,
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_REMOVE_USER,
+        async_handle_remove_user,
+        schema=vol.Schema({vol.Required(ATTR_USER_ID): str}),
+    )
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_PULSE_UNLOCK,
         async_handle_pulse_unlock,
         schema=vol.Schema(
@@ -163,6 +272,18 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         SERVICE_REBOOT_DOOR,
         async_handle_reboot,
         schema=vol.Schema({vol.Required(ATTR_DEVICE_ID): str}),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_PUSH_SNAPSHOT,
+        async_handle_push_snapshot,
+        schema=vol.Schema({vol.Required(ATTR_DEVICE_ID): str}),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_PUSH_ALL_SNAPSHOTS,
+        async_handle_push_all_snapshots,
+        schema=vol.Schema({}),
     )
     hass.services.async_register(
         DOMAIN,

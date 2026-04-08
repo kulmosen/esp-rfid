@@ -43,6 +43,63 @@ remove_door:
       selector:
         text:
 
+register_user:
+  name: Register user
+  description: Add or update a centrally managed access user for one or more doors.
+  fields:
+    user_id:
+      required: true
+      example: dennis
+      selector:
+        text:
+    name:
+      required: true
+      example: Dennis
+      selector:
+        text:
+    door_ids:
+      required: true
+      example:
+        - frontdoor
+        - backdoor
+      selector:
+        object:
+    rfid_uid:
+      required: false
+      example: A1B2C3D4
+      selector:
+        text:
+    pin:
+      required: false
+      example: "1234"
+      selector:
+        text:
+    active:
+      required: false
+      default: true
+      selector:
+        boolean:
+    valid_from:
+      required: false
+      example: 2026-04-08T12:00:00+00:00
+      selector:
+        text:
+    valid_until:
+      required: false
+      example: 2026-12-31T23:59:59+00:00
+      selector:
+        text:
+
+remove_user:
+  name: Remove user
+  description: Remove a centrally managed access user.
+  fields:
+    user_id:
+      required: true
+      example: dennis
+      selector:
+        text:
+
 pulse_unlock:
   name: Pulse unlock
   description: Trigger a momentary unlock pulse on a specific door.
@@ -111,3 +168,17 @@ reboot_door:
       example: frontdoor
       selector:
         text:
+
+push_snapshot:
+  name: Push snapshot
+  description: Build and push the latest snapshot for one specific door.
+  fields:
+    device_id:
+      required: true
+      example: frontdoor
+      selector:
+        text:
+
+push_all_snapshots:
+  name: Push all snapshots
+  description: Build and push fresh snapshots to all configured door nodes.

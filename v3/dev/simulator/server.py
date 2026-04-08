@@ -39,11 +39,14 @@ class SimulatorState:
         self.lock_state = "locked"
         self.health_state = "online"
         self.event_queue_depth = 0
+        self.credential_count = 0
+        self.snapshot_generated_at: str | None = None
         self.last_sync_at = _utc_now()
         self.relay_active = False
         self.last_error: str | None = None
         self.last_command: str | None = None
         self.boot_count = 1
+        self.last_snapshot_payload: dict[str, Any] | None = None
         self._pulse_timer: threading.Timer | None = None
         self._lock = threading.Lock()
 
@@ -57,6 +60,8 @@ class SimulatorState:
                 "lock_state": self.lock_state,
                 "snapshot_version": self.snapshot_version,
                 "event_queue_depth": self.event_queue_depth,
+                "credential_count": self.credential_count,
+                "snapshot_generated_at": self.snapshot_generated_at,
                 "last_sync_at": self.last_sync_at,
                 "firmware_version": self.firmware_version,
                 "relay_active": self.relay_active,
@@ -131,6 +136,29 @@ class SimulatorState:
             self.lock_state = "locked"
             self.relay_active = False
             self.event_queue_depth = 0
+
+    def apply_snapshot(self, payload: dict[str, Any]) -> bool:
+        """Apply a pushed snapshot payload."""
+        with self._lock:
+            if payload.get("device_id") != self.device_id:
+                self.last_error = "snapshot_device_mismatch"
+                return False
+
+            users = payload.get("users")
+            if not isinstance(users, list):
+                self.last_error = "snapshot_users_invalid"
+                return False
+
+            self.snapshot_version = str(payload.get("version", self.snapshot_version))
+            self.snapshot_generated_at = str(
+                payload.get("generated_at", self.snapshot_generated_at or _utc_now())
+            )
+            self.credential_count = len(users)
+            self.last_snapshot_payload = payload
+            self.last_sync_at = _utc_now()
+            self.last_command = "apply_snapshot"
+            self.last_error = None
+            return True
 
 
 STATE = SimulatorState()
@@ -224,11 +252,36 @@ class Handler(BaseHTTPRequestHandler):
             self._write_json(HTTPStatus.NOT_FOUND, {"error": "unknown_command"})
             return
 
+        if parsed.path == "/v1/snapshot":
+            if not self._require_auth():
+                return
+
+            payload = self._read_json()
+            if not STATE.apply_snapshot(payload):
+                self._write_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"ok": False, "error": STATE.last_error or "snapshot_rejected"},
+                )
+                return
+
+            self._write_json(
+                HTTPStatus.ACCEPTED,
+                {
+                    "ok": True,
+                    "snapshot_version": STATE.snapshot_version,
+                    "credential_count": STATE.credential_count,
+                },
+            )
+            return
+
         if parsed.path == "/api/debug/reset":
             STATE.cancel_hold("debug_reset")
             STATE.event_queue_depth = 0
             STATE.last_sync_at = _utc_now()
             STATE.last_command = "debug_reset"
+            STATE.credential_count = 0
+            STATE.snapshot_generated_at = None
+            STATE.last_snapshot_payload = None
             self._write_json(HTTPStatus.OK, {"ok": True})
             return
 

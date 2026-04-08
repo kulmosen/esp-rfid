@@ -78,7 +78,31 @@ class EspRfidV3ApiClient:
             ),
             relay_active=bool(payload.get("relay_active", False)),
             hold_supported=bool(payload.get("hold_supported", self._door.allow_hold_open)),
+            credential_count=int(payload.get("credential_count", 0)),
+            snapshot_generated_at=(
+                str(payload["snapshot_generated_at"])
+                if payload.get("snapshot_generated_at") is not None
+                else None
+            ),
         )
+
+    async def async_push_snapshot(self, payload: dict[str, Any]) -> None:
+        """Push a snapshot payload to the node."""
+        try:
+            async with self._session.post(
+                self._url("/v1/snapshot"),
+                headers=self._headers(),
+                json=payload,
+            ) as response:
+                if response.status not in (200, 202, 204):
+                    body = await response.text()
+                    raise EspRfidV3ApiError(
+                        f"{self._door.name} rejected snapshot with HTTP {response.status}: {body}"
+                    )
+        except ClientError as err:
+            raise EspRfidV3ApiError(
+                f"Snapshot push failed for {self._door.name}: {err}"
+            ) from err
 
     async def async_post_command(
         self,

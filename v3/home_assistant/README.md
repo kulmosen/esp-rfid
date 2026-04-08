@@ -44,12 +44,16 @@ Se [v3/dev/README.md](./../dev/README.md).
 
 - `esp_rfid_v3.register_door`
 - `esp_rfid_v3.remove_door`
+- `esp_rfid_v3.register_user`
+- `esp_rfid_v3.remove_user`
 - `esp_rfid_v3.pulse_unlock`
 - `esp_rfid_v3.hold_unlock`
 - `esp_rfid_v3.cancel_hold`
 - `esp_rfid_v3.resync_door`
 - `esp_rfid_v3.sync_all`
 - `esp_rfid_v3.reboot_door`
+- `esp_rfid_v3.push_snapshot`
+- `esp_rfid_v3.push_all_snapshots`
 
 ## Næste skridt
 

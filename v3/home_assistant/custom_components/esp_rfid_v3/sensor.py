@@ -34,6 +34,7 @@ async def async_setup_entry(
             [
                 EspRfidV3SnapshotVersionSensor(runtime.coordinator, door),
                 EspRfidV3EventQueueDepthSensor(runtime.coordinator, door),
+                EspRfidV3CredentialCountSensor(runtime.coordinator, door),
                 EspRfidV3LastSyncSensor(runtime.coordinator, door),
             ]
         )
@@ -121,3 +122,22 @@ class EspRfidV3LastSyncSensor(EspRfidV3DoorCoordinatorEntity, SensorEntity):
             return None
 
         return parse_datetime(last_sync)
+
+
+class EspRfidV3CredentialCountSensor(EspRfidV3DoorCoordinatorEntity, SensorEntity):
+    """Expose how many credentials the door currently has in its snapshot."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_name = "Credential Count"
+    _attr_native_unit_of_measurement = "credentials"
+    _attr_icon = "mdi:key-chain"
+
+    def __init__(self, coordinator: EspRfidV3Coordinator, door: DoorNodeConfig) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, door)
+        self._attr_unique_id = f"{door.device_id}_credential_count"
+
+    @property
+    def native_value(self) -> int:
+        """Return credential count."""
+        return self.coordinator.get_status(self._door.device_id).credential_count

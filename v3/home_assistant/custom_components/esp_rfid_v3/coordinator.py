@@ -59,7 +59,8 @@ class EspRfidV3Coordinator(DataUpdateCoordinator[dict[str, DoorNodeStatus]]):
 
     def get_status(self, device_id: str) -> DoorNodeStatus:
         """Return the latest known status."""
-        return self.data.get(device_id, DoorNodeStatus(lock_state=LOCK_STATE_UNKNOWN))
+        data = self.data or {}
+        return data.get(device_id, DoorNodeStatus(lock_state=LOCK_STATE_UNKNOWN))
 
     async def _async_update_data(self) -> dict[str, DoorNodeStatus]:
         """Refresh all door statuses."""
@@ -107,4 +108,11 @@ class EspRfidV3Coordinator(DataUpdateCoordinator[dict[str, DoorNodeStatus]]):
 
     async def async_sync_all(self) -> None:
         """Refresh all devices."""
+        await self.async_request_refresh()
+
+    async def async_push_snapshot(self, device_id: str, payload: dict[str, Any]) -> None:
+        """Push a snapshot to a specific door and refresh state."""
+        door = self.get_door(device_id)
+        client = self._api_factory.create(door)
+        await client.async_push_snapshot(payload)
         await self.async_request_refresh()

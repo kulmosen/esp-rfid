@@ -70,6 +70,7 @@ def main() -> int:
         status = http_json(status_url, token=env["SIM_API_TOKEN"])
         assert status["lock_state"] == "locked"
         assert status["device_id"] == "smoke-door"
+        assert status["credential_count"] == 0
 
         http_json(
             f"{base_url}/v1/command/pulse_unlock",
@@ -107,6 +108,37 @@ def main() -> int:
         )
         status = http_json(status_url, token=env["SIM_API_TOKEN"])
         assert status["snapshot_version"] != previous_snapshot
+
+        snapshot_payload = {
+            "site_name": "Smoke Site",
+            "device_id": "smoke-door",
+            "door_name": "Smoke Door",
+            "generated_at": "2026-04-08T12:00:00+00:00",
+            "version": "smoke-snapshot-v2",
+            "allow_hold_open": True,
+            "users": [
+                {
+                    "user_id": "dennis",
+                    "name": "Dennis",
+                    "tag_digest": "abc123",
+                    "pin_hash": None,
+                    "pin_salt": None,
+                    "pin_iterations": None,
+                    "valid_from": None,
+                    "valid_until": None,
+                }
+            ],
+        }
+        http_json(
+            f"{base_url}/v1/snapshot",
+            method="POST",
+            token=env["SIM_API_TOKEN"],
+            payload=snapshot_payload,
+        )
+        status = http_json(status_url, token=env["SIM_API_TOKEN"])
+        assert status["snapshot_version"] == "smoke-snapshot-v2"
+        assert status["credential_count"] == 1
+        assert status["snapshot_generated_at"] == "2026-04-08T12:00:00+00:00"
 
         try:
             http_json(status_url)
