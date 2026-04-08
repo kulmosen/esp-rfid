@@ -169,6 +169,50 @@ function getPagedSlice(items, page) {
   };
 }
 
+function validateConfigPayload(config) {
+  if (!config || typeof config !== "object") {
+    return "Config payload is missing";
+  }
+
+  const requiredSections = ["network", "hardware", "general"];
+  for (const sectionName of requiredSections) {
+    if (!config[sectionName] || typeof config[sectionName] !== "object") {
+      return `Missing required config section: ${sectionName}`;
+    }
+  }
+
+  const requiredFields = [
+    ["network", "ssid"],
+    ["network", "wmode"],
+    ["network", "dhcp"],
+    ["hardware", "readertype"],
+    ["hardware", "rpin"],
+    ["hardware", "rtype"],
+    ["hardware", "ltype"],
+    ["hardware", "rtime"],
+    ["general", "hostnm"],
+    ["general", "pswd"]
+  ];
+
+  for (const [sectionName, fieldName] of requiredFields) {
+    if (config[sectionName][fieldName] === undefined || config[sectionName][fieldName] === null) {
+      return `Missing required config field: ${sectionName}.${fieldName}`;
+    }
+  }
+
+  if (!String(config.network.ssid || "").length) {
+    return "network.ssid must not be empty";
+  }
+  if (!String(config.general.hostnm || "").length) {
+    return "general.hostnm must not be empty";
+  }
+  if (!String(config.general.pswd || "").length) {
+    return "general.pswd must not be empty";
+  }
+
+  return "";
+}
+
 function createSimulator(options = {}) {
   const host = options.host || DEFAULT_HOST;
   const port = options.port || DEFAULT_PORT;
@@ -684,8 +728,21 @@ function createSimulator(options = {}) {
         appendEvent("INFO", "sim", "User removed", message.uid || "");
         break;
       case "configfile":
-        state.config = clone(message);
-        appendEvent("INFO", "sim", "Configuration updated", state.config.general.hostnm || "");
+        {
+          const validationError = validateConfigPayload(message);
+          if (validationError) {
+            sendToSocket(socket, {
+              command: "result",
+              resultof: "configfile",
+              result: false,
+              message: validationError
+            });
+            break;
+          }
+
+          state.config = clone(message);
+          appendEvent("INFO", "sim", "Configuration updated", state.config.general.hostnm || "");
+        }
         break;
       case "userlist":
         sendUserList(socket, message.page);

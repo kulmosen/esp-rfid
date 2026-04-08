@@ -135,8 +135,80 @@ esprfid::ConfigModel parseConfigModel(JsonObject network, JsonObject hardware, J
 	loadStringIfPresent(model.mqttPass, mqtt, "pswd");
 	loadStringIfPresent(model.mqttTopic, mqtt, "topic");
 
-	esprfid::normalizeConfigModel(model);
 	return model;
+}
+
+bool hasRequiredConfigSection(JsonObject configObject, const char *sectionName)
+{
+	return configObject.containsKey(sectionName) && configObject[sectionName].is<JsonObject>();
+}
+
+bool hasRequiredConfigValue(JsonObject configObject, const char *sectionName, const char *fieldName)
+{
+	if (!hasRequiredConfigSection(configObject, sectionName))
+	{
+		return false;
+	}
+
+	JsonObject section = configObject[sectionName];
+	return section.containsKey(fieldName) && !section[fieldName].isNull();
+}
+
+bool parseValidatedConfigModelImpl(JsonObject configObject, esprfid::ConfigModel &model, String &message)
+{
+	if (configObject.isNull())
+	{
+		message = "Config payload is missing";
+		return false;
+	}
+
+	const char *requiredSections[] = {"network", "hardware", "general"};
+	for (std::size_t index = 0; index < sizeof(requiredSections) / sizeof(requiredSections[0]); ++index)
+	{
+		if (!hasRequiredConfigSection(configObject, requiredSections[index]))
+		{
+			message = String("Missing required config section: ") + requiredSections[index];
+			return false;
+		}
+	}
+
+	struct RequiredField
+	{
+		const char *section;
+		const char *field;
+	};
+
+	const RequiredField requiredFields[] = {
+		{"network", "ssid"},
+		{"network", "wmode"},
+		{"network", "dhcp"},
+		{"hardware", "readertype"},
+		{"hardware", "rpin"},
+		{"hardware", "rtype"},
+		{"hardware", "ltype"},
+		{"hardware", "rtime"},
+		{"general", "hostnm"},
+		{"general", "pswd"}};
+
+	for (std::size_t index = 0; index < sizeof(requiredFields) / sizeof(requiredFields[0]); ++index)
+	{
+		if (!hasRequiredConfigValue(configObject, requiredFields[index].section, requiredFields[index].field))
+		{
+			message = String("Missing required config field: ") + requiredFields[index].section + "." + requiredFields[index].field;
+			return false;
+		}
+	}
+
+	model = parseConfigModel(configObject["network"], configObject["hardware"], configObject["general"], configObject["mqtt"], configObject["ntp"]);
+	esprfid::ConfigValidationResult validation = esprfid::validateConfigModel(model);
+	if (!validation.valid)
+	{
+		message = validation.message.c_str();
+		return false;
+	}
+
+	esprfid::normalizeConfigModel(model);
+	return true;
 }
 
 void applyReaderConfiguration(const esprfid::ConfigModel &model, Config &config)
@@ -275,6 +347,11 @@ void applyConfigurationModel(const esprfid::ConfigModel &model, Config &config)
 }
 } // namespace
 
+bool parseValidatedConfigModel(JsonObject configObject, esprfid::ConfigModel &model, String &message)
+{
+	return parseValidatedConfigModelImpl(configObject, model, message);
+}
+
 bool ICACHE_FLASH_ATTR loadConfiguration(Config &config)
 {
 	File configFile = SPIFFS.open("/config.json", "r");
@@ -299,12 +376,21 @@ bool ICACHE_FLASH_ATTR loadConfiguration(Config &config)
 		return false;
 	}
 
+	#ifdef DEBUG
+		Serial.println(F("[ INFO ] Config file found"));
+		Serial.println(F("[ INFO ] Parsing and applying configuration"));
+	#endif
+	
+	esprfid::ConfigModel model;
+	String validationMessage = "";
+	if (!parseValidatedConfigModel(json.as<JsonObject>(), model, validationMessage))
+	{
 #ifdef DEBUG
-	Serial.println(F("[ INFO ] Config file found"));
-	Serial.println(F("[ INFO ] Parsing and applying configuration"));
+		Serial.print(F("[ WARN ] Invalid config file: "));
+		Serial.println(validationMessage);
 #endif
-
-	esprfid::ConfigModel model = parseConfigModel(json["network"], json["hardware"], json["general"], json["mqtt"], json["ntp"]);
+		return false;
+	}
 	applyConfigurationModel(model, config);
 
 #ifdef DEBUG

@@ -25,9 +25,15 @@ jobs:
     - name: Install simulator dependencies
       run: |
         npm ci --prefix tools/simulator
+    - name: Install Playwright browser
+      run: |
+        npx --prefix tools/simulator playwright install chromium
     - name: Run simulator smoke test
       run: |
         npm --prefix tools/simulator run smoke
+    - name: Run simulator browser e2e test
+      run: |
+        npm --prefix tools/simulator run e2e
     - name: Run host tests
       run: |
         chmod +x tests/host/run.sh

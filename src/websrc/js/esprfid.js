@@ -1632,6 +1632,11 @@ function socketMessageListener(evt) {
           document.getElementById("loading-img").style.display = "none";
         }
         break;
+      case "configfile":
+        if (obj.result === false) {
+          alert(obj.message || "Configuration was rejected.");
+        }
+        break;
       case "logfileMaintenance":
         if (obj.result === false) 
         {

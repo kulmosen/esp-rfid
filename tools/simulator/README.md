@@ -71,3 +71,9 @@ Run the smoke test:
 ```sh
 npm run smoke
 ```
+
+Run the browser-based end-to-end test:
+
+```sh
+npm run e2e
+```

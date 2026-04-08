@@ -148,6 +148,13 @@ npm start
 
 Then open `http://127.0.0.1:8080`. This simulates the browser-facing behavior of the device, but it is not a full ESP8266 CPU emulator.
 
+The simulator also includes a browser-based end-to-end test:
+
+```sh
+cd tools/simulator
+npm run e2e
+```
+
 ### Known Issues
 * You need to connect your MFRC522 reader to your ESP properly or you will end up with a boot loop
 * Please also check [GitHub issues](https://github.com/esprfid/esp-rfid/issues).

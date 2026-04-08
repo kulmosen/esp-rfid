@@ -42,6 +42,7 @@ SOFTWARE.
 #include "config.h"
 #include "core/AccessLogic.h"
 #include "core/ConfigModel.h"
+#include "core/ConfigValidation.h"
 #include "core/RuntimeGuards.h"
 
 Config config;
@@ -113,6 +114,8 @@ unsigned long uptimeSeconds = 0;
 bool wifiDisabledByPolicy = false;
 unsigned long wifiPinBlink = millis();
 unsigned long wiFiUptimeMillis = 0;
+
+bool parseValidatedConfigModel(JsonObject configObject, esprfid::ConfigModel &model, String &message);
 
 #include "led.esp"
 #include "beeper.esp"

@@ -6,10 +6,12 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "smoke": "node smoke-test.js"
+    "smoke": "node smoke-test.js",
+    "e2e": "node e2e-test.js"
   },
   "license": "UNLICENSED",
   "dependencies": {
+    "playwright": "1.59.1",
     "ws": "^8.18.1"
   }
 }

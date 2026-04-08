@@ -120,6 +120,16 @@ void mqttPublishAck(String command)
 	mqttPublishEvent(&root);
 }
 
+void mqttPublishError(String command, String message)
+{
+	DynamicJsonDocument root(512);
+	root["type"] = command + "_error";
+	root["ip"] = WiFi.localIP().toString();
+	root["hostname"] = config.deviceHostname;
+	root["message"] = message;
+	mqttPublishEvent(&root);
+}
+
 void mqttPublishBoot(time_t boot_time)
 {
 	DynamicJsonDocument root(512);
@@ -716,8 +726,18 @@ void processMqttMessage(MqttMessage *incomingMessage)
 #ifdef DEBUG
 			Serial.println("[ INFO ] Failed parsing MQTT message!!!");
 #endif
+			mqttPublishError("updateconf", "Failed parsing MQTT message");
 			return;
 		}
+
+		esprfid::ConfigModel validatedModel;
+		String validationMessage = "";
+		if (!parseValidatedConfigModel(mqttIncomingJson["configfile"].as<JsonObject>(), validatedModel, validationMessage))
+		{
+			mqttPublishError("updateconf", validationMessage);
+			return;
+		}
+
 		File f = SPIFFS.open("/config.json", "w");
 		if (f)
 		{

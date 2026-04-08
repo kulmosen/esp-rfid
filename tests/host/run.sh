@@ -15,9 +15,11 @@ c++ \
   "${ROOT_DIR}/tests/host/test_main.cpp" \
   "${ROOT_DIR}/tests/host/test_access_logic.cpp" \
   "${ROOT_DIR}/tests/host/test_config_model.cpp" \
+  "${ROOT_DIR}/tests/host/test_config_validation.cpp" \
   "${ROOT_DIR}/tests/host/test_runtime_guards.cpp" \
   "${ROOT_DIR}/src/core/AccessLogic.cpp" \
   "${ROOT_DIR}/src/core/ConfigModel.cpp" \
+  "${ROOT_DIR}/src/core/ConfigValidation.cpp" \
   "${ROOT_DIR}/src/core/RuntimeGuards.cpp" \
   -o "${BIN_PATH}"
 
