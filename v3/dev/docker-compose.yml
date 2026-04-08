@@ -1,0 +1,53 @@
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: esp_rfid_v3_homeassistant
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+    environment:
+      TZ: Europe/Copenhagen
+    volumes:
+      - ./homeassistant:/config
+      - ../home_assistant/custom_components:/config/custom_components:ro
+    depends_on:
+      - esp_rfid_v3_frontdoor
+      - esp_rfid_v3_backdoor
+
+  esp_rfid_v3_frontdoor:
+    image: python:3.12-slim
+    container_name: esp_rfid_v3_frontdoor
+    restart: unless-stopped
+    working_dir: /app
+    command: ["python", "/app/server.py"]
+    environment:
+      SIM_BIND_HOST: 0.0.0.0
+      SIM_PORT: "18101"
+      SIM_DEVICE_ID: frontdoor
+      SIM_DOOR_NAME: Front Door
+      SIM_API_TOKEN: frontdoor-dev-token
+      SIM_ALLOW_HOLD_OPEN: "true"
+      SIM_SNAPSHOT_VERSION: "demo-frontdoor-v1"
+    ports:
+      - "18101:18101"
+    volumes:
+      - ./simulator:/app:ro
+
+  esp_rfid_v3_backdoor:
+    image: python:3.12-slim
+    container_name: esp_rfid_v3_backdoor
+    restart: unless-stopped
+    working_dir: /app
+    command: ["python", "/app/server.py"]
+    environment:
+      SIM_BIND_HOST: 0.0.0.0
+      SIM_PORT: "18102"
+      SIM_DEVICE_ID: backdoor
+      SIM_DOOR_NAME: Back Door
+      SIM_API_TOKEN: backdoor-dev-token
+      SIM_ALLOW_HOLD_OPEN: "true"
+      SIM_SNAPSHOT_VERSION: "demo-backdoor-v1"
+    ports:
+      - "18102:18102"
+    volumes:
+      - ./simulator:/app:ro

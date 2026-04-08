@@ -32,6 +32,14 @@ til:
 
 Genstart Home Assistant og tilføj derefter integrationen via UI.
 
+Hvis du vil arbejde lokalt uden at sætte noget op manuelt, ligger der nu en færdig dev stack i:
+
+```text
+v3/dev
+```
+
+Se [v3/dev/README.md](./../dev/README.md).
+
 ## Foreløbige services
 
 - `esp_rfid_v3.register_door`

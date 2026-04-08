@@ -96,3 +96,4 @@ Hvis vi starter kode næste runde, vil jeg tage denne rækkefølge:
 3. snapshot datamodel i Python
 4. firmware-side snapshot parser og access engine
 5. minimal simulator for v3 device API
+6. lokal Home Assistant dev stack med docker-compose

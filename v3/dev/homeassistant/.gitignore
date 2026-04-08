@@ -1,0 +1,16 @@
+.HA_VERSION
+.cloud
+.data
+.db
+.ip_bans.yaml
+.storage
+backups
+blueprints
+config
+deps
+home-assistant.log
+home-assistant.log.1
+media
+tts
+www/community
+__pycache__/
