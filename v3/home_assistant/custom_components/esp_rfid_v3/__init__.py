@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from ipaddress import ip_address
 from typing import Any
+from urllib.parse import urlparse
 
 import voluptuous as vol
 
@@ -60,6 +62,34 @@ def _get_runtime(hass: HomeAssistant) -> EspRfidV3RuntimeData:
     return next(iter(runtime_map.values()))
 
 
+def _normalize_base_url(base_url: str) -> str:
+    """Normalize and validate a door base URL."""
+    normalized = base_url.strip().rstrip("/")
+    parsed = urlparse(normalized)
+
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise HomeAssistantError(
+            "Door base URL must be a full http:// or https:// address"
+        )
+
+    hostname = parsed.hostname or ""
+    is_loopback = hostname.lower() == "localhost"
+    if hostname:
+        try:
+            is_loopback = is_loopback or ip_address(hostname).is_loopback
+        except ValueError:
+            pass
+
+    if is_loopback:
+        raise HomeAssistantError(
+            "Door base URL cannot use localhost or 127.0.0.1 from Home Assistant. "
+            "Use the door node's real network address. In the local dev stack, use "
+            "http://esp_rfid_v3_frontdoor:18101 or http://esp_rfid_v3_backdoor:18102."
+        )
+
+    return normalized
+
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the integration."""
     hass.data.setdefault(DOMAIN, {})
@@ -85,7 +115,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         door = DoorNodeConfig(
             device_id=call.data[ATTR_DEVICE_ID],
             name=call.data[ATTR_NAME],
-            base_url=call.data[ATTR_BASE_URL],
+            base_url=_normalize_base_url(call.data[ATTR_BASE_URL]),
             api_token=call.data[ATTR_API_TOKEN],
             allow_hold_open=call.data[ATTR_ALLOW_HOLD_OPEN],
             enabled=call.data[ATTR_ENABLED],

@@ -9,7 +9,6 @@ services:
       TZ: Europe/Copenhagen
     volumes:
       - ./homeassistant:/config
-      - ../home_assistant/custom_components:/config/custom_components:ro
     depends_on:
       - esp_rfid_v3_frontdoor
       - esp_rfid_v3_backdoor

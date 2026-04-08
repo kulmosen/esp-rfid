@@ -1,4 +1,5 @@
 .HA_VERSION
+.cache
 .cloud
 .data
 .ha_run.lock
@@ -8,6 +9,7 @@
 *.db-*
 backups
 blueprints
+custom_components
 config
 deps
 home-assistant.log

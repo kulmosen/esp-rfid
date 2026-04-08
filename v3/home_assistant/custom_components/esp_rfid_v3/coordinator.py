@@ -89,7 +89,8 @@ class EspRfidV3Coordinator(DataUpdateCoordinator[dict[str, DoorNodeStatus]]):
             try:
                 result[device_id] = await client.async_get_status()
             except EspRfidV3ApiError as err:
-                previous = self.data.get(device_id, DoorNodeStatus())
+                previous_data = self.data or {}
+                previous = previous_data.get(device_id, DoorNodeStatus())
                 result[device_id] = replace(
                     previous,
                     available=False,

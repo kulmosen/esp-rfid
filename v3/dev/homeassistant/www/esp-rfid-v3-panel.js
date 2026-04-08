@@ -64,14 +64,43 @@ class EspRfidV3AdminPanel extends HTMLElement {
     }
   }
 
+  _validateDoorBaseUrl(baseUrl) {
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(baseUrl);
+    } catch (_error) {
+      return "Base URL skal være en fuld http:// eller https:// adresse.";
+    }
+
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+      return "Base URL skal bruge http eller https.";
+    }
+
+    const hostname = parsedUrl.hostname.toLowerCase();
+    if (["localhost", "127.0.0.1", "::1"].includes(hostname)) {
+      return "localhost/127.0.0.1 virker ikke fra Home Assistant-containeren. Brug simulator-navnet som f.eks. http://esp_rfid_v3_frontdoor:18101.";
+    }
+
+    return "";
+  }
+
   async _onDoorSubmit(event) {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const baseUrl = String(formData.get("base_url") || "").trim();
+    const baseUrlError = this._validateDoorBaseUrl(baseUrl);
+    if (baseUrlError) {
+      this._error = baseUrlError;
+      this._message = "";
+      this._render();
+      return;
+    }
+
     await this._callService("register_door", {
       device_id: String(formData.get("device_id") || "").trim(),
       name: String(formData.get("name") || "").trim(),
-      base_url: String(formData.get("base_url") || "").trim(),
+      base_url: baseUrl,
       api_token: String(formData.get("api_token") || "").trim(),
       allow_hold_open: formData.get("allow_hold_open") === "on",
       enabled: formData.get("enabled") === "on",
@@ -515,6 +544,10 @@ class EspRfidV3AdminPanel extends HTMLElement {
               <label>
                 Base URL
                 <input name="base_url" placeholder="http://esp_rfid_v3_frontdoor:18101" required />
+                <span class="muted">
+                  Brug ikke <code>127.0.0.1</code> eller <code>localhost</code> her. Fra HA-containeren
+                  skal du bruge dørens netværksadresse eller simulator-navnet.
+                </span>
               </label>
               <label>
                 API Token

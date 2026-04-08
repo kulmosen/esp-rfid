@@ -7,14 +7,16 @@ Dette miljø giver en lokal Home Assistant testinstans og to simulerede dørnode
 - 1 x Home Assistant container på `http://127.0.0.1:8123`
 - 1 x frontdør-simulator på `http://127.0.0.1:18101`
 - 1 x bagdør-simulator på `http://127.0.0.1:18102`
-- direkte mount af `esp_rfid_v3` integrationen fra repoet
+- synkroniseret kopi af `esp_rfid_v3` integrationen i dev-konfigurationen
 
 ## Start
 
 ```sh
-cd /Users/dennis/RadixCloud/A-IT/Projekter/esp-rfid/v3/dev
-docker compose up -d
+/Users/dennis/RadixCloud/A-IT/Projekter/esp-rfid/v3/dev/up.sh
 ```
+
+Scriptet synkroniserer custom integrationen ind i `v3/dev/homeassistant/custom_components`,
+før containerne startes. Det gør miljøet mere robust på Docker Desktop og efter genstarter.
 
 ## Stop
 
@@ -39,6 +41,9 @@ Frontdør simulator:
 - `name`: `Front Door`
 - `base_url`: `http://esp_rfid_v3_frontdoor:18101`
 - `api_token`: `frontdoor-dev-token`
+
+Vigtigt: brug ikke `http://127.0.0.1:18101` eller `http://localhost:18101` inde i Home Assistant.
+Fra HA-containeren peger `127.0.0.1` på containeren selv, ikke på frontdør-simulatoren.
 
 Bagdør simulator:
 
