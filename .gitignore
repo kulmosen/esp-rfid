@@ -62,6 +62,8 @@ artifacts/releases/
 # Dependency directories
 node_modules/
 jspm_packages/
+__pycache__/
+*.pyc
 
 # Typescript v1 declaration files
 typings/
