@@ -34,3 +34,33 @@ To use it:
 4. open `http://127.0.0.1:8080`
 
 The simulator is intentionally a behavior-level test tool, not a full ESP8266 CPU emulator.
+
+## release_bundle.py
+
+`release_bundle.py` builds or packages a firmware binary into a versioned local bundle under `artifacts/releases/`.
+
+Example:
+
+```sh
+python3 tools/release_bundle.py create --env generic --label backdoor-baseline --device-label backdoor
+```
+
+Each bundle contains:
+
+1. the firmware binary
+2. `manifest.json` with commit, checksum, and source metadata
+3. `SHA256SUMS.txt`
+4. `ROLLBACK.md` with install and rollback notes
+
+## device_update.py
+
+`device_update.py` uploads a bundle or a raw firmware binary to a live ESP-RFID device through the existing `/update` endpoint.
+
+Examples:
+
+```sh
+python3 tools/device_update.py --host 192.168.1.40 --password admin --bundle artifacts/releases/<bundle-name>
+python3 tools/device_update.py --host 192.168.1.40 --password admin --firmware .pio/build/generic/firmware.bin
+```
+
+The script checks `/login` first by default so it fails fast if the password is wrong.

@@ -100,6 +100,28 @@ The resulting (built) image(s) can be found in the directory ```/bin``` created 
 
 If you want to modify the code, you can read more info in the [CONTRIBUTING](./CONTRIBUTING.md) file.
 
+##### Safer upgrades and rollback
+
+If you want to test gradual upgrades on a live door, create a versioned firmware bundle first:
+
+```sh
+python3 tools/release_bundle.py create --env generic --label backdoor-baseline --device-label backdoor
+```
+
+This creates a local bundle in `artifacts/releases/` with:
+
+* the exact firmware binary
+* a manifest with commit and checksum
+* a small rollback readme
+
+Before updating a live device, export `Backup Settings` and `Backup User Data` from the web UI. If the candidate firmware misbehaves, you can roll back by uploading the earlier bundle again:
+
+```sh
+python3 tools/device_update.py --host 192.168.1.40 --password <admin-password> --bundle artifacts/releases/<bundle-name>
+```
+
+This only rolls back the firmware. Settings, users, and logs are stored separately in SPIFFS, so keep the exported JSON backups together with the bundle.
+
 
 ### Pin Layout
 
