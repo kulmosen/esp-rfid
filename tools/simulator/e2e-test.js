@@ -55,6 +55,38 @@ async function loginToSimulator(page, pageUrl, expectedHostname) {
   });
 }
 
+function decodeJsonDownloadHref(href) {
+  const prefix = "data:text/json;charset=utf-8,";
+  assert.ok(href && href.startsWith(prefix), `Expected JSON data URL, got: ${href}`);
+  return JSON.parse(decodeURIComponent(href.slice(prefix.length)));
+}
+
+async function readDownloadJson(page, anchorSelector) {
+  const href = await page.evaluate((selector) => {
+    const anchor = document.querySelector(selector);
+    return anchor ? anchor.getAttribute("href") || "" : "";
+  }, anchorSelector);
+  return decodeJsonDownloadHref(href);
+}
+
+async function clickLogMaintenanceAction(page, filename, iconClass) {
+  const clicked = await page.evaluate(([resolvedFilename, resolvedIconClass]) => {
+    const anchors = Array.from(document.querySelectorAll("#ajaxcontent #spifftable a[filename]"));
+    const anchor = anchors.find((item) => {
+      return item.getAttribute("filename") === resolvedFilename && !!item.querySelector(`.${resolvedIconClass}`);
+    });
+
+    if (!anchor) {
+      return false;
+    }
+
+    anchor.click();
+    return true;
+  }, [filename, iconClass]);
+
+  assert.equal(clicked, true, `Unable to find log action ${iconClass} for ${filename}`);
+}
+
 function findAvailablePort() {
   return new Promise((resolve, reject) => {
     const probe = net.createServer();
@@ -192,9 +224,105 @@ async function main() {
     await waitForPageText(page, "#ajaxcontent #eventtable", "Simulated RFID tag scanned", 6000);
     await waitForPageText(page, "#ajaxcontent #eventtable", newUser.uid, 6000);
 
+    await openContent(page, "#backupcontent", "#ajaxcontent label[for='restoreSet']");
+    await page.evaluate(() => {
+      backupset();
+    });
+    const settingsBackup = await readDownloadJson(page, "#ajaxcontent #downloadSet");
+    assert.equal(settingsBackup.command, "configfile");
+    assert.equal(settingsBackup.general.hostnm, "sim-door-alpha");
+
+    await page.evaluate(() => {
+      backupuser();
+    });
+    await waitForCondition(async () => {
+      const href = await page.evaluate(() => {
+        const anchor = document.querySelector("#ajaxcontent #downloadUser");
+        return anchor ? anchor.getAttribute("href") || "" : "";
+      });
+      return href.startsWith("data:text/json;charset=utf-8,");
+    }, 6000);
+    const userBackup = await readDownloadJson(page, "#ajaxcontent #downloadUser");
+    assert.equal(userBackup.type, "esp-rfid-userbackup");
+    assert.ok(userBackup.list.some((user) => user.uid === newUser.uid && user.username === newUser.username));
+
+    const restoredHostname = "sim-door-restored";
+    const restoreConfig = JSON.parse(JSON.stringify(settingsBackup));
+    restoreConfig.general.hostnm = restoredHostname;
+    await page.locator("#ajaxcontent #restoreSet").setInputFiles({
+      name: "esp-rfid-settings.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(restoreConfig, null, 2), "utf8")
+    });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => {
+      commit();
+    });
+    await waitForCondition(() => simulator.getState().config.general.hostnm === restoredHostname, 6000);
+    await loginToSimulator(page, pageUrl, restoredHostname);
+
+    await openContent(page, "#backupcontent", "#ajaxcontent label[for='restoreUser']");
+    const restoredUser = {
+      uid: "facefeed",
+      username: "Restored User",
+      pincode: "9191",
+      acctype: 1,
+      validsince: 0,
+      validuntil: 2082758400
+    };
+    await page.locator("#ajaxcontent #restoreUser").setInputFiles({
+      name: "esp-rfid-users.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify({
+        type: "esp-rfid-userbackup",
+        version: "v0.6",
+        list: [restoredUser]
+      }, null, 2), "utf8")
+    });
+    await waitForCondition(() => {
+      return simulator.getState().users.some((user) => user.uid === restoredUser.uid && user.username === restoredUser.username);
+    }, 6000);
+    await waitForPageText(page, "#ajaxcontent #dynamic", "Completed", 6000);
+
+    await openContent(page, "#logmaintenancecontent", "#ajaxcontent #spifftable");
+    await waitForPageText(page, "#ajaxcontent #spifftable", "/latestlog.json", 6000);
+    await waitForPageText(page, "#ajaxcontent #spifftable", "/eventlog.json", 6000);
+
+    await clickLogMaintenanceAction(page, "/latestlog.json", "glyphicon-refresh");
+    await waitForCondition(() => {
+      const fileNames = Object.keys(simulator.getState().files);
+      return fileNames.some((fileName) => fileName.startsWith("/latestlog.json.") && !fileName.includes(".split."));
+    }, 6000);
+    const latestArchiveName = Object.keys(simulator.getState().files)
+      .filter((fileName) => fileName.startsWith("/latestlog.json.") && !fileName.includes(".split."))
+      .sort()[0];
+    assert.ok(latestArchiveName, "Expected archived access log file after rollover");
+    await waitForPageText(page, "#ajaxcontent #spifftable", latestArchiveName, 6000);
+
+    simulator.performLogMaintenance("split", latestArchiveName);
+    await openContent(page, "#logmaintenancecontent", "#ajaxcontent #spifftable");
+    const splitArchiveNames = Object.keys(simulator.getState().files)
+      .filter((fileName) => fileName.startsWith(`${latestArchiveName}.split.`))
+      .sort();
+    assert.equal(splitArchiveNames.length, 2, "Expected two split log files");
+    await waitForPageText(page, "#ajaxcontent #spifftable", splitArchiveNames[0], 6000);
+    await waitForPageText(page, "#ajaxcontent #spifftable", splitArchiveNames[1], 6000);
+
+    simulator.performLogMaintenance("delete", splitArchiveNames[0]);
+    await openContent(page, "#logmaintenancecontent", "#ajaxcontent #spifftable");
+    await waitForCondition(() => !Object.prototype.hasOwnProperty.call(simulator.getState().files, splitArchiveNames[0]), 6000);
+    await waitForCondition(async () => {
+      const tableText = await page.textContent("#ajaxcontent #spifftable");
+      return tableText && !tableText.includes(splitArchiveNames[0]);
+    }, 6000);
+
     const state = simulator.getState();
-    assert.equal(state.config.general.hostnm, "sim-door-alpha");
+    assert.equal(state.config.general.hostnm, restoredHostname);
     assert.ok(state.users.some((user) => user.uid === newUser.uid && user.username === newUser.username));
+    assert.ok(state.users.some((user) => user.uid === restoredUser.uid && user.username === restoredUser.username));
+    assert.ok(Object.prototype.hasOwnProperty.call(state.files, latestArchiveName));
+    assert.ok(Object.prototype.hasOwnProperty.call(state.files, splitArchiveNames[1]));
+    assert.ok(!Object.prototype.hasOwnProperty.call(state.files, splitArchiveNames[0]));
     console.log("[ OK ] Simulator browser e2e test passed");
   } finally {
     await page.close();

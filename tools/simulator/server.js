@@ -401,19 +401,13 @@ function createSimulator(options = {}) {
     return candidate;
   }
 
-  function handleLogMaintenance(socket, message) {
-    const filename = message.filename || "";
-    const action = message.action || "";
+  function applyLogMaintenance(action, filename) {
     const target = state.files[filename];
-
     if (!target) {
-      sendToSocket(socket, {
-        command: "result",
-        resultof: "logfileMaintenance",
-        result: false,
+      return {
+        ok: false,
         message: `File not found: ${filename}`
-      });
-      return;
+      };
     }
 
     if (action === "delete") {
@@ -432,26 +426,43 @@ function createSimulator(options = {}) {
     } else if (action === "split") {
       const halfway = Math.ceil(target.entries.length / 2);
       const firstSplitName = nextGeneratedFilename(filename, ".split.");
-      const secondSplitName = nextGeneratedFilename(filename, ".split.");
       state.files[firstSplitName] = {
         kind: target.kind,
         entries: clone(target.entries.slice(0, halfway))
       };
+      const secondSplitName = nextGeneratedFilename(filename, ".split.");
       state.files[secondSplitName] = {
         kind: target.kind,
         entries: clone(target.entries.slice(halfway))
       };
     } else {
+      return {
+        ok: false,
+        message: `Unsupported action: ${action}`
+      };
+    }
+
+    appendEvent("INFO", "sim", `Log maintenance: ${action}`, filename);
+    return {
+      ok: true
+    };
+  }
+
+  function handleLogMaintenance(socket, message) {
+    const filename = message.filename || "";
+    const action = message.action || "";
+    const result = applyLogMaintenance(action, filename);
+
+    if (!result.ok) {
       sendToSocket(socket, {
         command: "result",
         resultof: "logfileMaintenance",
         result: false,
-        message: `Unsupported action: ${action}`
+        message: result.message
       });
       return;
     }
 
-    appendEvent("INFO", "sim", `Log maintenance: ${action}`, filename);
     sendToSocket(socket, {
       command: "result",
       resultof: "logfileMaintenance",
@@ -848,6 +859,12 @@ function createSimulator(options = {}) {
     },
     resetState,
     simulatePICCScan,
+    performLogMaintenance(action, filename) {
+      const result = applyLogMaintenance(action, filename);
+      if (!result.ok) {
+        throw new Error(result.message);
+      }
+    },
     start() {
       return new Promise((resolve) => {
         server.listen(port, host, () => {

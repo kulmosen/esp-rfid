@@ -85,3 +85,6 @@ The browser scenario covers:
 * adding a user from an unknown RFID scan
 * replaying a known RFID scan
 * verifying access log and event log views
+* settings backup and restore
+* user backup and restore
+* logfile rollover, split, and delete flows

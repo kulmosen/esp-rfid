@@ -155,7 +155,7 @@ cd tools/simulator
 npm run e2e
 ```
 
-That test now exercises invalid config rejection, config save, user creation from a scanned tag, and access/event log rendering.
+That test now exercises invalid config rejection, config save, user creation from a scanned tag, access/event log rendering, backup and restore, and logfile maintenance flows.
 
 ### Known Issues
 * You need to connect your MFRC522 reader to your ESP properly or you will end up with a boot loop
